@@ -248,13 +248,13 @@ class TestRalphMode(unittest.TestCase):
     
     def test_unicode_support(self):
         """Test Unicode characters in prompts."""
-        prompt = "یک API بساز 🚀"
-        self.ralph.enable(prompt, completion_promise="تمام شد")
+        prompt = "Build an API 🚀"
+        self.ralph.enable(prompt, completion_promise="Finished!")
         
         self.assertEqual(self.ralph.get_prompt(), prompt)
         
         state = self.ralph.get_state()
-        self.assertEqual(state['completion_promise'], "تمام شد")
+        self.assertEqual(state['completion_promise'], "Finished!")
     
     def test_special_characters_in_promise(self):
         """Test special characters in completion promise."""
@@ -295,7 +295,7 @@ class TestCrossPlatform(unittest.TestCase):
     
     def test_file_encoding(self):
         """Test UTF-8 encoding works on all platforms."""
-        prompt = "Test with émojis 🎉 and عربي text"
+        prompt = "Test with émojis 🎉 and unicode text"
         self.ralph.enable(prompt)
         
         # Read back and verify

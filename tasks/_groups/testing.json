@@ -1,7 +1,7 @@
 {
   "name": "testing",
   "title": "Testing Tasks",
-  "description": "تسک‌های مربوط به تست‌نویسی",
+  "description": "Tasks for unit testing and test coverage",
   "tasks": [
     "add-unit-tests.md",
     "add-e2e-tests.md",

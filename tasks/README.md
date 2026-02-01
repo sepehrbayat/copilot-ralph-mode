@@ -1,49 +1,49 @@
 # 📋 Task Library
 
-این پوشه شامل تسک‌های آماده برای استفاده با Ralph Mode است.
+This folder contains ready-to-use tasks for Ralph Mode.
 
-## ساختار فایل‌ها
+## File Structure
 
 ```
 tasks/
-├── README.md              # این فایل
-├── _groups/               # گروه‌بندی تسک‌ها
-│   ├── rtl.json           # تسک‌های RTL
-│   ├── testing.json       # تسک‌های تست
-│   └── refactor.json      # تسک‌های ریفکتور
-└── *.md                   # تسک‌های منفرد
+├── README.md              # This file
+├── _groups/               # Task groups
+│   ├── rtl.json           # RTL tasks
+│   ├── testing.json       # Testing tasks
+│   └── refactor.json      # Refactoring tasks
+└── *.md                   # Individual tasks
 ```
 
-## فرمت فایل تسک (.md)
+## Task File Format (.md)
 
 ```markdown
 ---
 id: TASK-001
-title: عنوان تسک
+title: Task title
 tags: [rtl, ui]
 model: gpt-5.2-codex
 max_iterations: 20
 completion_promise: DONE
 ---
 
-توضیحات کامل تسک...
+Full task description...
 ```
 
-## استفاده
+## Usage
 
 ```bash
-# اجرای یک تسک با نام فایل
+# Run a task by filename
 python3 ralph_mode.py run --task rtl-fixes.md
 
-# اجرای یک تسک با ID
+# Run a task by ID
 python3 ralph_mode.py run --task TASK-001
 
-# اجرای گروهی از تسک‌ها
+# Run a group of tasks
 python3 ralph_mode.py run --group rtl
 
-# لیست تسک‌ها
+# List tasks
 python3 ralph_mode.py tasks list
 
-# جستجوی تسک
+# Search tasks
 python3 ralph_mode.py tasks search "RTL"
 ```
