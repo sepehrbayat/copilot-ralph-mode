@@ -1,0 +1,10 @@
+{
+  "name": "rtl",
+  "title": "RTL Support Tasks",
+  "description": "تسک‌های مربوط به پشتیبانی RTL و راست‌به‌چپ",
+  "tasks": [
+    "rtl-text-direction.md",
+    "rtl-margins-padding.md",
+    "rtl-flex-positioning.md"
+  ]
+}

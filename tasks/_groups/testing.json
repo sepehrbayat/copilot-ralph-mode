@@ -1,0 +1,10 @@
+{
+  "name": "testing",
+  "title": "Testing Tasks",
+  "description": "تسک‌های مربوط به تست‌نویسی",
+  "tasks": [
+    "add-unit-tests.md",
+    "add-e2e-tests.md",
+    "fix-failing-tests.md"
+  ]
+}

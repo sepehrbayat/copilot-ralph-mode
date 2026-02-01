@@ -82,6 +82,172 @@ class Colors:
 colors = Colors()
 
 
+class TaskLibrary:
+    """Task library manager for loading tasks from files."""
+    
+    TASKS_DIR = "tasks"
+    GROUPS_DIR = "_groups"
+    
+    def __init__(self, base_path: Optional[Path] = None):
+        """Initialize task library."""
+        self.base_path = Path(base_path) if base_path else Path(__file__).parent
+        self.tasks_dir = self.base_path / self.TASKS_DIR
+        self.groups_dir = self.tasks_dir / self.GROUPS_DIR
+    
+    def parse_task_file(self, file_path: Path) -> Dict[str, Any]:
+        """Parse a task markdown file with YAML frontmatter."""
+        content = file_path.read_text(encoding='utf-8')
+        
+        # Parse YAML frontmatter
+        if content.startswith('---'):
+            parts = content.split('---', 2)
+            if len(parts) >= 3:
+                try:
+                    # Simple YAML parsing without external deps
+                    frontmatter = {}
+                    for line in parts[1].strip().split('\n'):
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            key = key.strip()
+                            value = value.strip()
+                            # Handle arrays
+                            if value.startswith('[') and value.endswith(']'):
+                                value = [v.strip().strip('"\'') for v in value[1:-1].split(',')]
+                            # Handle numbers
+                            elif value.isdigit():
+                                value = int(value)
+                            frontmatter[key] = value
+                    
+                    return {
+                        **frontmatter,
+                        'prompt': parts[2].strip(),
+                        'file': str(file_path)
+                    }
+                except Exception:
+                    pass
+        
+        # Fallback: use filename as ID
+        return {
+            'id': file_path.stem.upper(),
+            'title': file_path.stem.replace('-', ' ').title(),
+            'prompt': content,
+            'file': str(file_path)
+        }
+    
+    def list_tasks(self) -> list:
+        """List all available tasks."""
+        tasks = []
+        if not self.tasks_dir.exists():
+            return tasks
+        
+        for file_path in sorted(self.tasks_dir.glob('*.md')):
+            if file_path.name.startswith('_') or file_path.name == 'README.md':
+                continue
+            try:
+                task = self.parse_task_file(file_path)
+                tasks.append(task)
+            except Exception:
+                pass
+        
+        return tasks
+    
+    def list_groups(self) -> list:
+        """List all task groups."""
+        groups = []
+        if not self.groups_dir.exists():
+            return groups
+        
+        for file_path in sorted(self.groups_dir.glob('*.json')):
+            try:
+                data = json.loads(file_path.read_text(encoding='utf-8'))
+                data['file'] = str(file_path)
+                groups.append(data)
+            except Exception:
+                pass
+        
+        return groups
+    
+    def get_task(self, identifier: str) -> Optional[Dict[str, Any]]:
+        """Get a task by ID, filename, or partial match."""
+        identifier_lower = identifier.lower()
+        
+        # Try exact filename match first
+        exact_path = self.tasks_dir / identifier
+        if exact_path.exists():
+            return self.parse_task_file(exact_path)
+        
+        # Try with .md extension
+        if not identifier.endswith('.md'):
+            exact_path = self.tasks_dir / f"{identifier}.md"
+            if exact_path.exists():
+                return self.parse_task_file(exact_path)
+        
+        # Search by ID or title
+        for task in self.list_tasks():
+            task_id = task.get('id', '').lower()
+            task_title = task.get('title', '').lower()
+            task_file = Path(task.get('file', '')).stem.lower()
+            
+            if identifier_lower in [task_id, task_file]:
+                return task
+            if identifier_lower in task_title:
+                return task
+        
+        return None
+    
+    def get_group(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a task group by name."""
+        name_lower = name.lower()
+        
+        # Try exact filename
+        exact_path = self.groups_dir / f"{name}.json"
+        if exact_path.exists():
+            try:
+                return json.loads(exact_path.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+        
+        # Search by name
+        for group in self.list_groups():
+            if group.get('name', '').lower() == name_lower:
+                return group
+        
+        return None
+    
+    def get_group_tasks(self, group_name: str) -> list:
+        """Get all tasks in a group."""
+        group = self.get_group(group_name)
+        if not group:
+            return []
+        
+        tasks = []
+        for task_ref in group.get('tasks', []):
+            task = self.get_task(task_ref)
+            if task:
+                tasks.append(task)
+        
+        return tasks
+    
+    def search_tasks(self, query: str) -> list:
+        """Search tasks by query string."""
+        query_lower = query.lower()
+        results = []
+        
+        for task in self.list_tasks():
+            task_id = task.get('id', '').lower()
+            task_title = task.get('title', '').lower()
+            task_tags = task.get('tags', [])
+            task_prompt = task.get('prompt', '').lower()
+            
+            if (query_lower in task_id or 
+                query_lower in task_title or
+                query_lower in task_prompt or
+                any(query_lower in str(tag).lower() for tag in task_tags)):
+                results.append(task)
+        
+        return results
+
+
 class RalphMode:
     """Main Ralph Mode controller."""
     
@@ -810,6 +976,208 @@ def cmd_history(args) -> int:
     return 0
 
 
+def cmd_tasks(args) -> int:
+    """Handle tasks command - list, search, show tasks."""
+    library = TaskLibrary()
+    
+    action = args.action if hasattr(args, 'action') else 'list'
+    
+    if action == 'list':
+        tasks = library.list_tasks()
+        groups = library.list_groups()
+        
+        if not tasks and not groups:
+            print(f"{colors.YELLOW}No tasks found in tasks/ directory{colors.NC}")
+            print("Create task files like: tasks/my-task.md")
+            return 0
+        
+        print_banner("📋 TASK LIBRARY")
+        
+        if tasks:
+            print(f"{colors.CYAN}Tasks:{colors.NC}")
+            for task in tasks:
+                task_id = task.get('id', 'N/A')
+                title = task.get('title', 'Untitled')
+                tags = task.get('tags', [])
+                tags_str = f" [{', '.join(tags)}]" if tags else ""
+                print(f"  {colors.GREEN}{task_id:<12}{colors.NC} {title}{colors.YELLOW}{tags_str}{colors.NC}")
+            print()
+        
+        if groups:
+            print(f"{colors.CYAN}Groups:{colors.NC}")
+            for group in groups:
+                name = group.get('name', 'N/A')
+                title = group.get('title', 'Untitled')
+                task_count = len(group.get('tasks', []))
+                print(f"  {colors.GREEN}{name:<12}{colors.NC} {title} ({task_count} tasks)")
+            print()
+        
+        return 0
+    
+    elif action == 'show':
+        identifier = args.identifier if hasattr(args, 'identifier') else None
+        if not identifier:
+            print(f"{colors.RED}❌ Please specify a task ID or filename{colors.NC}")
+            return 1
+        
+        task = library.get_task(identifier)
+        if not task:
+            print(f"{colors.RED}❌ Task not found: {identifier}{colors.NC}")
+            return 1
+        
+        print_banner(f"📋 {task.get('id', 'TASK')}")
+        print(f"{colors.CYAN}Title:{colors.NC}      {task.get('title', 'Untitled')}")
+        print(f"{colors.CYAN}ID:{colors.NC}         {task.get('id', 'N/A')}")
+        tags = task.get('tags', [])
+        print(f"{colors.CYAN}Tags:{colors.NC}       {', '.join(tags) if tags else 'none'}")
+        print(f"{colors.CYAN}Model:{colors.NC}      {task.get('model', DEFAULT_MODEL)}")
+        print(f"{colors.CYAN}Max Iter:{colors.NC}   {task.get('max_iterations', 20)}")
+        print(f"{colors.CYAN}Promise:{colors.NC}    {task.get('completion_promise', 'DONE')}")
+        print(f"{colors.CYAN}File:{colors.NC}       {task.get('file', 'N/A')}")
+        print()
+        print(f"{colors.YELLOW}📝 Prompt:{colors.NC}")
+        print(task.get('prompt', 'No prompt'))
+        print()
+        
+        return 0
+    
+    elif action == 'search':
+        query = args.identifier if hasattr(args, 'identifier') and args.identifier else ''
+        if not query:
+            print(f"{colors.RED}❌ Please specify a search query{colors.NC}")
+            return 1
+        
+        results = library.search_tasks(query)
+        if not results:
+            print(f"{colors.YELLOW}No tasks found matching: {query}{colors.NC}")
+            return 0
+        
+        print(f"\n{colors.GREEN}Found {len(results)} task(s):{colors.NC}\n")
+        for task in results:
+            task_id = task.get('id', 'N/A')
+            title = task.get('title', 'Untitled')
+            print(f"  {colors.GREEN}{task_id:<12}{colors.NC} {title}")
+        print()
+        
+        return 0
+    
+    else:
+        print(f"{colors.RED}❌ Unknown action: {action}{colors.NC}")
+        return 1
+
+
+def cmd_run(args) -> int:
+    """Handle run command - run a task from library."""
+    library = TaskLibrary()
+    ralph = RalphMode()
+    
+    # Check if already active
+    if ralph.is_active():
+        print(f"{colors.RED}❌ Ralph mode is already active. Use 'disable' first.{colors.NC}")
+        return 1
+    
+    # Get task or group
+    task_id = args.task if hasattr(args, 'task') and args.task else None
+    group_name = args.group if hasattr(args, 'group') and args.group else None
+    
+    if not task_id and not group_name:
+        print(f"{colors.RED}❌ Please specify --task or --group{colors.NC}")
+        print("\nUsage:")
+        print("  ralph-mode run --task RTL-001")
+        print("  ralph-mode run --task rtl-text-direction.md")
+        print("  ralph-mode run --group rtl")
+        return 1
+    
+    # Handle single task
+    if task_id:
+        task = library.get_task(task_id)
+        if not task:
+            print(f"{colors.RED}❌ Task not found: {task_id}{colors.NC}")
+            print(f"\nAvailable tasks:")
+            for t in library.list_tasks()[:5]:
+                print(f"  - {t.get('id', 'N/A')}")
+            return 1
+        
+        # Get options from task file or args
+        model = args.model if hasattr(args, 'model') and args.model else task.get('model')
+        max_iter = args.max_iterations if hasattr(args, 'max_iterations') and args.max_iterations else task.get('max_iterations', 20)
+        promise = args.completion_promise if hasattr(args, 'completion_promise') and args.completion_promise else task.get('completion_promise', 'DONE')
+        
+        try:
+            state = ralph.enable(
+                prompt=task.get('prompt', ''),
+                max_iterations=max_iter,
+                completion_promise=promise,
+                model=model
+            )
+        except ValueError as e:
+            print(f"{colors.RED}❌ Error: {e}{colors.NC}")
+            return 1
+        
+        print_banner(f"🔄 RUNNING: {task.get('id', 'TASK')}")
+        print(f"{colors.CYAN}Title:{colors.NC}       {task.get('title', 'Untitled')}")
+        print(f"{colors.CYAN}Model:{colors.NC}       {state.get('model', DEFAULT_MODEL)}")
+        print(f"{colors.CYAN}Max Iter:{colors.NC}    {max_iter}")
+        print(f"{colors.CYAN}Promise:{colors.NC}     {promise}")
+        print()
+        print(f"{colors.GREEN}✅ Task loaded! Run ./ralph-loop.sh run to start.{colors.NC}")
+        
+        return 0
+    
+    # Handle group
+    if group_name:
+        tasks = library.get_group_tasks(group_name)
+        if not tasks:
+            print(f"{colors.RED}❌ Group not found or empty: {group_name}{colors.NC}")
+            print(f"\nAvailable groups:")
+            for g in library.list_groups():
+                print(f"  - {g.get('name', 'N/A')}")
+            return 1
+        
+        # Get options from args
+        model = args.model if hasattr(args, 'model') and args.model else None
+        max_iter = args.max_iterations if hasattr(args, 'max_iterations') and args.max_iterations else 20
+        promise = args.completion_promise if hasattr(args, 'completion_promise') and args.completion_promise else 'DONE'
+        
+        # Prepare batch tasks
+        batch_tasks = []
+        for task in tasks:
+            batch_tasks.append({
+                'id': task.get('id'),
+                'title': task.get('title'),
+                'prompt': task.get('prompt'),
+                'model': task.get('model', model),
+                'max_iterations': task.get('max_iterations', max_iter),
+                'completion_promise': task.get('completion_promise', promise)
+            })
+        
+        try:
+            state = ralph.init_batch(
+                tasks=batch_tasks,
+                max_iterations=max_iter,
+                completion_promise=promise,
+                model=model
+            )
+        except ValueError as e:
+            print(f"{colors.RED}❌ Error: {e}{colors.NC}")
+            return 1
+        
+        print_banner(f"🔄 RUNNING GROUP: {group_name}")
+        print(f"{colors.CYAN}Tasks:{colors.NC}       {len(batch_tasks)}")
+        print(f"{colors.CYAN}Model:{colors.NC}       {state.get('model', DEFAULT_MODEL)}")
+        print(f"{colors.CYAN}Max Iter:{colors.NC}    {max_iter} per task")
+        print()
+        print(f"{colors.YELLOW}Tasks in queue:{colors.NC}")
+        for i, t in enumerate(batch_tasks, 1):
+            print(f"  {i}. {t.get('id', 'N/A')} - {t.get('title', 'Untitled')}")
+        print()
+        print(f"{colors.GREEN}✅ Group loaded! Run ./ralph-loop.sh run to start.{colors.NC}")
+        
+        return 0
+    
+    return 1
+
+
 def cmd_help(args) -> int:
     """Handle help command."""
     models_str = ", ".join(AVAILABLE_MODELS[:5]) + "..."
@@ -824,6 +1192,8 @@ self-referential AI development loops with GitHub Copilot.
 
 {colors.YELLOW}COMMANDS:{colors.NC}
     enable      Enable Ralph mode with a prompt
+    run         Run a task from the task library
+    tasks       List, search, or show tasks
     batch-init  Initialize batch mode with multiple tasks
     disable     Disable Ralph mode
     status      Show current status
@@ -833,6 +1203,13 @@ self-referential AI development loops with GitHub Copilot.
     complete    Check if output contains completion promise
     history     Show iteration history
     help        Show this help message
+
+{colors.YELLOW}TASK LIBRARY:{colors.NC}
+    tasks list              List all available tasks
+    tasks show <id>         Show task details
+    tasks search <query>    Search tasks
+    run --task <id>         Run a single task
+    run --group <name>      Run a group of tasks
 
 {colors.YELLOW}ENABLE OPTIONS:{colors.NC}
     --max-iterations <n>        Maximum iterations (default: 0 = unlimited)
@@ -852,12 +1229,13 @@ self-referential AI development loops with GitHub Copilot.
 
 {colors.YELLOW}EXAMPLES:{colors.NC}
     ralph-mode enable "Build a REST API" --max-iterations 20
+    ralph-mode run --task RTL-001
+    ralph-mode run --group rtl
+    ralph-mode tasks list
+    ralph-mode tasks show RTL-001
     ralph-mode enable "Fix tests" --model claude-sonnet-4.5
-    ralph-mode enable "Refactor code" --model auto
     ralph-mode batch-init --tasks-file tasks.json --max-iterations 20
     ralph-mode status
-    ralph-mode iterate
-    ralph-mode next-task
     ralph-mode disable
 
 {colors.YELLOW}PHILOSOPHY:{colors.NC}
@@ -934,6 +1312,26 @@ def main() -> int:
     # History command
     history_parser = subparsers.add_parser('history', help='Show history')
     history_parser.set_defaults(func=cmd_history)
+    
+    # Tasks command (task library)
+    tasks_parser = subparsers.add_parser('tasks', help='Manage task library')
+    tasks_parser.add_argument('action', choices=['list', 'show', 'search'],
+                              help='Action to perform')
+    tasks_parser.add_argument('identifier', nargs='?', default=None,
+                              help='Task ID, filename, or search query')
+    tasks_parser.set_defaults(func=cmd_tasks)
+    
+    # Run command (run from task library)
+    run_parser = subparsers.add_parser('run', help='Run task from library')
+    run_parser.add_argument('--task', type=str, default=None,
+                            help='Task ID or filename to run')
+    run_parser.add_argument('--group', type=str, default=None,
+                            help='Task group name to run')
+    run_parser.add_argument('--model', type=str, default=None,
+                            help=f'Override model (default from task file or {DEFAULT_MODEL})')
+    run_parser.add_argument('--max-iterations', type=int, default=None,
+                            help='Override max iterations')
+    run_parser.set_defaults(func=cmd_run)
     
     # Help command
     help_parser = subparsers.add_parser('help', help='Show help')
