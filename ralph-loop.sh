@@ -25,7 +25,13 @@ PROMPT_FILE="$RALPH_DIR/prompt.md"
 OUTPUT_FILE="$RALPH_DIR/output.txt"
 HISTORY_FILE="$RALPH_DIR/history.jsonl"
 SLEEP_BETWEEN=2
-ALLOW_TOOLS="shell(git,npm,node,python3,cat,ls,grep,find,mkdir,cp,mv,rm,touch,echo,head,tail,wc)"
+
+# Add copilot to PATH if needed
+export PATH="$HOME/.local/bin:$PATH"
+
+# Copilot CLI command and options
+COPILOT_CMD="copilot"
+COPILOT_OPTS="--allow-all-tools --allow-all-paths"
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,7 +50,6 @@ ${YELLOW}USAGE:${NC}
 
 ${YELLOW}OPTIONS:${NC}
     --sleep <seconds>       Sleep between iterations (default: 2)
-    --allow-tools <tools>   Tools to allow gh copilot to use
     --dry-run               Print commands without executing
     --verbose               Verbose output
 
@@ -59,8 +64,7 @@ ${YELLOW}EXAMPLES:${NC}
     ./ralph-loop.sh single
 
 ${YELLOW}REQUIREMENTS:${NC}
-    - gh cli installed (https://cli.github.com)
-    - gh copilot extension (gh extension install github/gh-copilot)
+    - GitHub Copilot CLI (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
     - Ralph mode enabled (python3 ralph_mode.py enable ...)
 
 EOF
@@ -178,10 +182,10 @@ run_single() {
         echo ""
     fi
     
-    # Run gh copilot
-    echo -e "${BLUE}🤖 Running gh copilot...${NC}"
+    # Run copilot CLI
+    echo -e "${BLUE}🤖 Running GitHub Copilot CLI...${NC}"
     
-    local cmd="gh copilot -p \"$context\" --allow-tool \"$ALLOW_TOOLS\""
+    local cmd="$COPILOT_CMD -p \"$context\" $COPILOT_OPTS"
     
     if [[ "$dry_run" == "true" ]]; then
         echo -e "${YELLOW}[DRY RUN] Would execute:${NC}"
@@ -192,11 +196,11 @@ run_single() {
     # Execute and capture output
     mkdir -p "$RALPH_DIR"
     
-    # Use timeout to prevent infinite hangs
-    if timeout 600 gh copilot -p "$context" --allow-tool "$ALLOW_TOOLS" 2>&1 | tee "$OUTPUT_FILE"; then
+    # Use timeout to prevent infinite hangs (10 minutes)
+    if timeout 600 $COPILOT_CMD -p "$context" $COPILOT_OPTS 2>&1 | tee "$OUTPUT_FILE"; then
         echo ""
     else
-        echo -e "${YELLOW}⚠️ gh copilot exited with non-zero status${NC}"
+        echo -e "${YELLOW}⚠️ Copilot CLI exited with non-zero status${NC}"
     fi
     
     # Check for completion promise in output
@@ -293,8 +297,8 @@ main() {
                 sleep_time="$2"
                 shift 2
                 ;;
-            --allow-tools)
-                ALLOW_TOOLS="$2"
+            --copilot-opts)
+                COPILOT_OPTS="$2"
                 shift 2
                 ;;
             *)
