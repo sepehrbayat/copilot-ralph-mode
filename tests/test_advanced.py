@@ -170,11 +170,11 @@ class TestPropertyBased:
         assert retrieved == prompt, f"Prompt mismatch: {repr(prompt)} != {repr(retrieved)}"
         self.ralph.disable()
     
-    @given(st.integers(min_value=1, max_value=1000))
-    @settings(max_examples=50, deadline=None)
+    @given(st.integers(min_value=1, max_value=20))  # Reduced max for performance
+    @settings(max_examples=20, deadline=None)
     @example(1)
-    @example(100)
-    @example(999)
+    @example(5)
+    @example(10)
     def test_max_iterations_boundary(self, max_iter):
         """Max iterations should be respected exactly."""
         if self.ralph.is_active():

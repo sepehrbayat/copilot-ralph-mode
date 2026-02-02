@@ -1,0 +1,17 @@
+# Core dependencies (required)
+# No external dependencies for core functionality!
+# Ralph Mode works with Python standard library only.
+
+# Development dependencies (optional - for testing)
+pytest>=7.0.0
+pytest-timeout>=2.0.0
+pytest-cov>=4.0.0
+
+# Property-based testing (optional - for advanced tests)
+hypothesis>=6.0.0
+
+# Code quality (optional - for development)
+# flake8>=6.0.0
+# black>=23.0.0
+# isort>=5.0.0
+# mypy>=1.0.0

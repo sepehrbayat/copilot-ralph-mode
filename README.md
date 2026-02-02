@@ -111,6 +111,23 @@ copilot --help
 
 ### Installation
 
+#### One-Line Install (Recommended)
+
+**macOS/Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/sepehrbayat/copilot-ralph-mode/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/sepehrbayat/copilot-ralph-mode/main/install.ps1 | iex
+```
+
+**Windows (CMD):**
+Download and run [install.cmd](install.cmd)
+
+#### Manual Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/sepehrbayat/copilot-ralph-mode.git
@@ -118,6 +135,24 @@ cd copilot-ralph-mode
 
 # Make scripts executable (Linux/macOS)
 chmod +x ralph_mode.py ralph-loop.sh
+
+# Install development dependencies (optional)
+pip install -r requirements-dev.txt
+```
+
+#### Using pip
+
+```bash
+pip install copilot-ralph-mode
+```
+
+#### Using Make
+
+```bash
+git clone https://github.com/sepehrbayat/copilot-ralph-mode.git
+cd copilot-ralph-mode
+make install      # Install to ~/.local/bin
+make dev-install  # Install with dev dependencies
 ```
 
 ### Your First Ralph Loop
@@ -1224,30 +1259,48 @@ For MCP servers requiring secrets:
 
 ## 🧪 Testing
 
+### Quick Test Commands
+
 ```bash
-# Run all unit tests
-python3 -m pytest tests/ -v
+# Using Make (recommended)
+make test           # Run all tests
+make test-cov       # Run with coverage report
+make lint           # Run code quality checks
 
-# Run specific test file
-python3 -m pytest tests/test_ralph_mode.py -v
+# Using pytest directly
+pytest tests/ -v                    # All tests
+pytest tests/test_ralph_mode.py -v  # Core tests
+pytest tests/test_advanced.py -v    # Advanced/edge case tests
+pytest tests/test_cross_platform.py -v  # Cross-platform tests
 
-# Test network resilience (PowerShell)
-.\tests\test_network_integration.ps1
-
-# Test network resilience demo
-.\tests\demo_network_resilience.ps1
-
-# Test network resilience (Bash)
-./tests/test_network_resilience.sh
+# Using Python
+python -m pytest tests/ -v --timeout=30
 ```
 
-### Test Coverage
+### Test Suites
 
-| Test Suite | Description |
-|------------|-------------|
-| `test_ralph_mode.py` | Core functionality (38 tests) |
-| `test_network_integration.ps1` | Network resilience integration |
-| `demo_network_resilience.ps1` | Live network outage simulation |
+| Suite | Tests | Description |
+|-------|-------|-------------|
+| `test_ralph_mode.py` | 38 | Core functionality |
+| `test_advanced.py` | 78 | Edge cases, property-based (hypothesis) |
+| `test_cross_platform.py` | 38 | Windows/macOS/Linux compatibility |
+| **Total** | **154** | Full test coverage |
+
+### CI/CD
+
+GitHub Actions runs tests on every push:
+- **Platforms:** Ubuntu, macOS, Windows
+- **Python versions:** 3.9, 3.10, 3.11, 3.12
+- **Matrix:** 12 combinations
+
+[![Tests](https://github.com/sepehrbayat/copilot-ralph-mode/actions/workflows/test.yml/badge.svg)](https://github.com/sepehrbayat/copilot-ralph-mode/actions/workflows/test.yml)
+
+### Code Quality
+
+```bash
+make lint    # flake8 + black check + isort check + mypy
+make format  # Auto-format with black + isort
+```
 
 ---
 
