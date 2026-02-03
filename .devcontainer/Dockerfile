@@ -78,18 +78,17 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 WORKDIR /workspace
 
 # Copy requirements first (for better caching)
-COPY requirements.txt requirements-dev.txt ./
+COPY requirements.txt requirements-dev.txt pyproject.toml ./
 
-# Install Python dependencies
+# Install Python dependencies (without editable install during build)
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -r requirements-dev.txt \
-    && pip install -e .
+    && pip install -r requirements-dev.txt
 
 # Copy the rest of the project
 COPY --chown=$USERNAME:$USERNAME . .
 
 # Make scripts executable
-RUN chmod +x ralph_mode.py ralph-loop.sh ralph-mode.sh \
+RUN chmod +x ralph_mode.py ralph-loop.sh ralph-mode.sh 2>/dev/null || true \
     && chmod +x .devcontainer/*.sh 2>/dev/null || true
 
 # Switch to non-root user
