@@ -725,9 +725,9 @@ python3 ralph_mode.py batch-init \
 ./ralph-loop.sh run
 ```
 
-### Mode 3: Individual Task Files with Groups (Recommended)
+### Mode 3: Task Library with Groups (Recommended)
 
-**The most precise and scalable approach.** Each task lives in its own `.md` file:
+**The most precise and scalable approach.** Each task lives in its own `.md` file and groups are defined in `tasks/_groups/`.
 
 ```bash
 # Create tasks directory
@@ -740,32 +740,47 @@ mkdir -p tasks tasks/_groups
 **Example task file (`tasks/HXA-001-flexbox-rtl.md`):**
 
 ```markdown
-# HXA-001: RTL Flexbox Conversion
+---
+id: HXA-001
+title: RTL Flexbox Conversion in Header
+tags: [rtl, ui]
+model: gpt-5.2-codex
+max_iterations: 10
+completion_promise: HXA_RTL_DONE
+---
+
+# RTL Flexbox Conversion in Header
 
 ## Objective
-Convert all flexbox classes to use logical properties for RTL support.
+Convert flexbox classes to RTL-safe logical properties in `src/components/Header.tsx`.
 
 ## Scope
-- ONLY modify: `src/components/**/*.tsx`
+- ONLY modify: `src/components/Header.tsx`
+- DO NOT read: Any other files
 - DO NOT touch: `src/api/`, `src/utils/`, `node_modules/`
 
 ## Pre-work
-1. List all files using `flex-row`, `flex-row-reverse`
-2. Create dependency graph of affected components
-3. Identify parent-child relationships
+1. Confirm `src/components/Header.tsx` exists and is writable
+2. Identify all `flex-row`, `flex-row-reverse`, `ml-*`, `mr-*` in this file
+3. Confirm no other files are required
 
 ## Changes Required
-- Replace `flex-row` with `flex-row` + `rtl:flex-row-reverse`
-- Replace `ml-*` with `ms-*` (margin-start)
-- Replace `mr-*` with `me-*` (margin-end)
+1. Replace `flex-row` with `flex-row` + `rtl:flex-row-reverse`
+2. Replace `ml-*` with `ms-*`
+3. Replace `mr-*` with `me-*`
 
 ## Acceptance Criteria
-- [ ] All flexbox layouts work correctly in RTL mode
-- [ ] No visual regression in LTR mode
-- [ ] Tests pass
+- [ ] Changes visible in `git diff`
+- [ ] No `ml-*` or `mr-*` remain in the file
+- [ ] If no changes needed, task FAILS
+
+## Verification
+```bash
+grep -E "ml-|mr-" src/components/Header.tsx | wc -l
+```
 
 ## Completion
-When done, output: <promise>DONE</promise>
+When done, output: <promise>HXA_RTL_DONE</promise>
 ```
 
 **Group configuration (`tasks/_groups/rtl.json`):**
@@ -786,12 +801,7 @@ When done, output: <promise>DONE</promise>
 **Run the group:**
 
 ```bash
-python3 ralph_mode.py batch-init \
-    --tasks-dir tasks/ \
-    --group rtl \
-    --max-iterations 100 \
-    --completion-promise "DONE"
-
+python3 ralph_mode.py run --group rtl
 ./ralph-loop.sh run
 ```
 
@@ -854,7 +864,6 @@ python3 ralph_mode.py status
 --max-iterations <n>        # Max iterations (0 = unlimited)
 --completion-promise <text> # Phrase that signals completion
 --tasks-file <path>         # Path to tasks JSON file
---tasks-dir <path>          # Path to tasks directory
 --group <name>              # Task group to run
 --auto-agents               # Enable dynamic sub-agent creation
 
@@ -894,39 +903,60 @@ By default, Ralph runs with `--allow-all-tools --allow-all-paths` for full autom
 
 ## 🏆 Best Practices
 
-Follow these practices to maximize Ralph Mode's effectiveness:
+Follow these practices to maximize Ralph Mode's effectiveness.
 
-### 1. Let AI Generate Your Tasks
+> 📘 **See [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) for comprehensive documentation.**
 
-Instead of manually writing task files, use VS Code's Copilot Chat:
+### ⚠️ Preventing Read-Only Behavior
 
-```
-Prompt Example:
-"Create 30 individual task files for Ralph Mode in the tasks/ folder.
-Each file should be named like: HXA-001-description.md
-The task is to implement complete two-factor authentication.
-Include detailed instructions, scope boundaries, and acceptance criteria in each file.
-Also create group files in tasks/_groups/ to organize them by: backend, frontend, tests."
-```
+The most common issue is Ralph only reading/scanning files without making changes. **Prevent this by:**
 
-Copilot will generate structured task files like:
+1. **Specify exact files** - Max 1-2 files per task
+2. **Add "DO NOT read"** - Prevents scanning the codebase
+3. **Use imperative language** - "Add X" not "Ensure X exists"
+4. **Require visible diff** - Task fails if no `git diff` output
 
-```
-tasks/
-├── HXA-001-setup-2fa-database.md
-├── HXA-002-totp-generation.md
-├── HXA-003-qr-code-component.md
-├── HXA-004-verification-api.md
-├── HXA-005-backup-codes.md
-├── ...
-├── HXA-030-e2e-tests.md
-└── _groups/
-    ├── backend.json
-    ├── frontend.json
-    └── tests.json
+#### ❌ Bad Task (causes read-only)
+```markdown
+Fix all RTL issues in the codebase.
 ```
 
-**Why this works:** You spend time *reviewing* tasks rather than *writing* them. The AI understands task decomposition and creates comprehensive coverage.
+#### ✅ Good Task (makes changes)
+```markdown
+## Scope
+- ONLY modify: `src/components/Button.tsx`
+- DO NOT read: Any other files
+
+## Changes Required
+1. Line 15: Change `ml-4` to `ms-4`
+2. Line 23: Change `text-left` to `text-start`
+
+## Acceptance Criteria
+- git diff must show changes
+- If no changes needed, task FAILS
+```
+
+### 1. Design Scoped Tasks
+
+Each task should target **ONE file with specific changes**:
+
+```markdown
+---
+id: TASK-001
+title: Add RTL margin to Button
+---
+
+## Scope
+- **ONLY modify:** `src/components/Button.tsx`
+- **DO NOT read:** Any other files
+
+## Changes Required
+1. **Change margin** on line 15: `ml-4` → `ms-4`
+
+## Acceptance Criteria
+- [ ] Change visible in `git diff`
+- [ ] If already changed, task FAILS
+```
 
 ### 2. Always Review Before Execution
 
@@ -936,25 +966,18 @@ tasks/
 - The scope boundaries are correct
 - You understand what Ralph will do
 
-### 3. Use High Iteration Counts
+### 3. Use Reasonable Iteration Counts
 
-Set `--max-iterations` high (50-100) so the loop doesn't terminate prematurely:
+Set `--max-iterations` based on task complexity:
+- Simple change: 5-10
+- Medium task: 10-20
+- Complex task: 20-50
 
 ```bash
-python3 ralph_mode.py batch-init \
-    --tasks-dir tasks/ \
-    --group backend \
-    --max-iterations 100 \
+python3 ralph_mode.py enable "Fix Button margin" \
+    --max-iterations 10 \
     --completion-promise "DONE"
 ```
-
-**Why:** Complex tasks may need many iterations to:
-- Gather context about the codebase
-- Fix errors and edge cases
-- Refine the solution
-- Run and fix tests
-
-Low limits cause incomplete work.
 
 ### 4. Always Run From Project Root
 

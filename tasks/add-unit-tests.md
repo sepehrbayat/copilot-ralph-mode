@@ -1,51 +1,90 @@
 ---
 id: TEST-001
-title: Add unit tests for components
+title: Add unit test for Button onClick handler
 tags: [testing, jest, react]
-model: claude-sonnet-4.5
-max_iterations: 30
-completion_promise: TESTS_ADDED
+model: gpt-5.2-codex
+max_iterations: 10
+completion_promise: TEST_BUTTON_DONE
 ---
 
-# Add Unit Tests
+# Add Unit Test for Button Click Handler
 
-Add comprehensive unit tests for React components.
+## Objective
+Add one specific unit test for Button component's onClick functionality.
 
-## Requirements
+---
 
-1. Use Jest and React Testing Library
-2. Test all exported components
-3. Cover edge cases
-4. Mock external dependencies
-5. Aim for 80%+ coverage
+## Scope
 
-## Test Structure
+- **ONLY modify:** `src/components/__tests__/Button.test.tsx`
+- **DO NOT read:** Any other files or directories
+- **DO NOT touch:** The component itself, other test files
+
+---
+
+## Pre-work
+
+1. Confirm `src/components/__tests__/Button.test.tsx` exists and is writable
+2. Identify current imports to avoid duplicates
+3. Confirm no other files are required
+
+---
+
+## Changes Required (Mandatory)
+
+1. **Add test case** to `Button.test.tsx`:
 
 ```typescript
-import { render, screen, fireEvent } from '@testing-library/react';
-import { ComponentName } from './ComponentName';
-
-describe('ComponentName', () => {
-  it('renders correctly', () => {
-    render(<ComponentName />);
-    expect(screen.getByRole('...')).toBeInTheDocument();
-  });
-
-  it('handles user interaction', () => {
-    // ...
-  });
+it('calls onClick handler when clicked', () => {
+  const handleClick = jest.fn();
+  render(<Button onClick={handleClick}>Click me</Button>);
+  
+  fireEvent.click(screen.getByRole('button'));
+  
+  expect(handleClick).toHaveBeenCalledTimes(1);
 });
 ```
+
+2. **Add imports** if missing:
+   - `fireEvent` from `@testing-library/react`
+   - `jest` types if needed
+
+---
+
+## Acceptance Criteria
+
+- [ ] New test case added to Button.test.tsx
+- [ ] Test uses `fireEvent.click`
+- [ ] Test verifies `onClick` was called
+- [ ] Changes visible in `git diff`
+- [ ] **If test already exists, task FAILS**
+
+---
 
 ## Verification
 
 ```bash
-npm run test -- --coverage
+# Should find the new test
+grep -c "calls onClick handler" src/components/__tests__/Button.test.tsx
+
+# Run the specific test
+npm test -- --testPathPattern=Button.test.tsx --testNamePattern="calls onClick"
 ```
+
+---
 
 ## Completion
 
-When tests are added and passing, output:
+**Only** when the test is added and can run, output:
+
 ```
-<promise>TESTS_ADDED</promise>
+<promise>TEST_BUTTON_DONE</promise>
 ```
+
+---
+
+## Notes
+
+- Do NOT modify the Button component
+- Do NOT add multiple tests
+- Add ONLY the specific test described above

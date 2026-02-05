@@ -35,6 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     # SSH (for GitHub)
     openssh-client \
+    # Node.js + npm (for Copilot CLI)
+    nodejs \
+    npm \
     # Cleanup
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
@@ -74,6 +77,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Install GitHub Copilot CLI (node-based)
+RUN npm install -g @githubnext/github-copilot-cli
+
 # Set up workspace
 WORKDIR /workspace
 
@@ -86,6 +92,12 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # Copy the rest of the project
 COPY --chown=$USERNAME:$USERNAME . .
+
+# Ensure VS Code server directories exist and are writable
+RUN mkdir -p /home/$USERNAME/.vscode-server/data \
+    /home/$USERNAME/.vscode-server/bin \
+    /home/$USERNAME/.vscode-server/extensions \
+    && chown -R $USERNAME:$USERNAME /home/$USERNAME/.vscode-server
 
 # Make scripts executable
 RUN chmod +x ralph_mode.py ralph-loop.sh ralph-mode.sh 2>/dev/null || true \

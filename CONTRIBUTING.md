@@ -35,6 +35,7 @@ Thank you for your interest in contributing! 🎉
 - Follow existing patterns in the codebase
 - Add tests for new functionality
 - Update documentation as needed
+- Follow the task standard in [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) when adding or editing tasks
 
 ### Testing
 

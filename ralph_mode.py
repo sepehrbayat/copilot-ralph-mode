@@ -46,6 +46,25 @@ AVAILABLE_MODELS = [
     "gpt-4.1",
 ]
 
+REQUIRED_TASK_SECTIONS = [
+    "## Objective",
+    "## Scope",
+    "## Pre-work",
+    "## Changes Required",
+    "## Acceptance Criteria",
+    "## Verification",
+    "## Completion",
+]
+
+REQUIRED_SCOPE_MARKERS = [
+    "ONLY modify",
+    "DO NOT read",
+    "DO NOT touch",
+]
+
+STRICT_TASKS = os.environ.get("RALPH_STRICT_TASKS") == "1"
+STRICT_ROOT = os.environ.get("RALPH_STRICT_ROOT") == "1"
+
 
 # ANSI Colors (disabled on Windows without colorama)
 class Colors:
@@ -192,8 +211,8 @@ class TaskLibrary:
 
         # Search by ID or title
         for task in self.list_tasks():
-            task_id = task.get("id", "").lower()
-            task_title = task.get("title", "").lower()
+            task_id = str(task.get("id", "")).lower()
+            task_title = str(task.get("title", "")).lower()
             task_file = Path(task.get("file", "")).stem.lower()
 
             if identifier_lower in [task_id, task_file]:
@@ -400,20 +419,50 @@ Ralph Mode is an iterative development loop where you (Copilot) work on a task
 repeatedly until completion. The same prompt is fed back to you each iteration,
 but you see your previous work in files and git history.
 
+## ⚠️ CRITICAL: Make Real Changes
+
+**You MUST make actual file modifications each iteration.**
+
+### Anti-Patterns (DO NOT)
+- ❌ Only running `grep`, `cat`, `find` to scan files
+- ❌ Reading many files without making changes
+- ❌ Outputting DONE when no changes were made
+- ❌ Verifying existing code instead of modifying it
+
+### Required Behavior (DO)
+- ✅ Make at least ONE real file change per iteration
+- ✅ Changes must be visible in `git diff`
+- ✅ Follow the exact scope defined in the task
+- ✅ If task is already satisfied, report FAILURE not DONE
+
 ## Your Workflow
 
 1. **Read the task** from `.ralph-mode/prompt.md`
-2. **Check state** from `.ralph-mode/state.json` (current iteration, limits)
-3. **Work on the task** - make changes, run tests, fix issues
-4. **Check completion** - are all requirements met?
-5. **Signal completion** OR **continue iterating**
+2. **Check scope** - ONLY modify files listed in scope
+3. **Make changes** - edit files as specified
+4. **Verify with git diff** - ensure changes are visible
+5. **Signal completion** ONLY when criteria met
 
-## Iteration Rules
+## Scope Rules
 
-- Each iteration, you see your previous work in files
-- The prompt stays the SAME - you improve incrementally
-- Check `iteration` in state.json to see current iteration
-- If `max_iterations` > 0 and you've reached it, stop
+- **ONLY modify** files explicitly listed in the task
+- **DO NOT read** files outside the scope
+- **DO NOT scan** the entire codebase
+- Focus on the specific change, nothing else
+
+## Task Template Requirements
+
+The task file must include these sections and you must follow them:
+
+- **Objective**: exact change required
+- **Scope**: ONLY modify / DO NOT read / DO NOT touch
+- **Pre-work**: verify target file and locations
+- **Changes Required**: specific, measurable edits
+- **Acceptance Criteria**: must include visible `git diff`
+- **Verification**: command(s) to validate change
+- **Completion**: exact promise string
+
+If required sections are missing or the change is already satisfied, report a blocker and do NOT output the promise.
 
 ## Current State
 
@@ -814,6 +863,66 @@ def print_banner(title: str) -> None:
     """Print a colored banner."""
     width = 60
     print()
+
+
+def _find_git_root(path: Path) -> Optional[Path]:
+    """Find the nearest git root from the given path."""
+    current = path.resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
+def _ensure_project_root(strict: bool = False) -> bool:
+    """Warn or error if not running from project root."""
+    cwd = Path.cwd()
+    git_root = _find_git_root(cwd)
+    if git_root and git_root != cwd:
+        message = (
+            "Run Ralph from the project root. "
+            f"Detected git root at: {git_root}. Current: {cwd}."
+        )
+        if strict:
+            print(f"{colors.RED}❌ Error: {message}{colors.NC}")
+            return False
+        print(f"{colors.YELLOW}⚠️ Warning: {message}{colors.NC}")
+    return True
+
+
+def _missing_task_requirements(prompt: str) -> list[str]:
+    """Return a list of missing task sections or scope markers."""
+    missing = []
+    normalized = prompt.lower()
+
+    for section in REQUIRED_TASK_SECTIONS:
+        if section.lower() not in normalized:
+            missing.append(section)
+
+    for marker in REQUIRED_SCOPE_MARKERS:
+        if marker.lower() not in normalized:
+            missing.append(marker)
+
+    return missing
+
+
+def _validate_task_prompt(task_label: str, prompt: str, strict: bool = False) -> bool:
+    """Validate task prompt against required sections and scope markers."""
+    if not prompt.strip():
+        missing = REQUIRED_TASK_SECTIONS + REQUIRED_SCOPE_MARKERS
+    else:
+        missing = _missing_task_requirements(prompt)
+
+    if not missing:
+        return True
+
+    missing_list = ", ".join(missing)
+    message = f"Task '{task_label}' is missing required sections or scope rules: {missing_list}"
+    if strict:
+        print(f"{colors.RED}❌ Error: {message}{colors.NC}")
+        return False
+    print(f"{colors.YELLOW}⚠️ Warning: {message}{colors.NC}")
+    return True
     print(f"{colors.GREEN}╔{'═' * width}╗{colors.NC}")
     print(f"{colors.GREEN}║{title:^{width}}║{colors.NC}")
     print(f"{colors.GREEN}╚{'═' * width}╝{colors.NC}")
@@ -822,12 +931,18 @@ def print_banner(title: str) -> None:
 
 def cmd_enable(args) -> int:
     """Handle enable command."""
+    if not _ensure_project_root(strict=STRICT_ROOT):
+        return 1
+
     ralph = RalphMode()
 
     prompt = " ".join(args.prompt) if args.prompt else ""
     if not prompt:
         print(f"{colors.RED}❌ Error: No prompt provided{colors.NC}")
         print('\nUsage: ralph-mode enable "Your task description" [options]')
+        return 1
+
+    if not _validate_task_prompt("manual prompt", prompt, strict=STRICT_TASKS):
         return 1
 
     # Validate model if provided
@@ -902,6 +1017,9 @@ def _load_tasks_from_file(tasks_file: str) -> list:
 
 def cmd_batch_init(args) -> int:
     """Handle batch-init command."""
+    if not _ensure_project_root(strict=STRICT_ROOT):
+        return 1
+
     ralph = RalphMode()
 
     # Validate model if provided
@@ -911,6 +1029,22 @@ def cmd_batch_init(args) -> int:
 
     try:
         tasks = _load_tasks_from_file(args.tasks_file)
+    except ValueError as e:
+        print(f"{colors.RED}❌ Error: {e}{colors.NC}")
+        return 1
+
+    for idx, task in enumerate(tasks, start=1):
+        if isinstance(task, str):
+            task_label = f"TASK-{idx:03d}"
+            prompt = task
+        else:
+            task_label = task.get("id") or f"TASK-{idx:03d}"
+            prompt = task.get("prompt", "")
+
+        if not _validate_task_prompt(task_label, prompt, strict=STRICT_TASKS):
+            return 1
+
+    try:
         state = ralph.init_batch(
             tasks=tasks,
             max_iterations=args.max_iterations,
@@ -1194,6 +1328,9 @@ def cmd_tasks(args) -> int:
 
 def cmd_run(args) -> int:
     """Handle run command - run a task from library."""
+    if not _ensure_project_root(strict=STRICT_ROOT):
+        return 1
+
     library = TaskLibrary()
     ralph = RalphMode()
 
@@ -1222,6 +1359,9 @@ def cmd_run(args) -> int:
             print("\nAvailable tasks:")
             for t in library.list_tasks()[:5]:
                 print(f"  - {t.get('id', 'N/A')}")
+            return 1
+
+        if not _validate_task_prompt(task.get("id", "TASK"), task.get("prompt", ""), strict=STRICT_TASKS):
             return 1
 
         # Get options from task file or args
@@ -1264,6 +1404,10 @@ def cmd_run(args) -> int:
             for g in library.list_groups():
                 print(f"  - {g.get('name', 'N/A')}")
             return 1
+
+        for task in tasks:
+            if not _validate_task_prompt(task.get("id", "TASK"), task.get("prompt", ""), strict=STRICT_TASKS):
+                return 1
 
         # Get options from args
         model = args.model if hasattr(args, "model") and args.model else None

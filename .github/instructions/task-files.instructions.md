@@ -15,38 +15,48 @@ Task files should use this structure:
 id: TASK-001
 title: Short Title
 tags: [tag1, tag2]
-max_iterations: 20
-completion_promise: DONE
+model: gpt-5.2-codex
+max_iterations: 10
+completion_promise: TASK_DONE
 ---
 
 # Task Title
 
 ## Objective
-Clear statement of what needs to be done.
+One sentence describing the exact change to make.
 
 ## Scope
-- ONLY modify: `path/to/files`
+- ONLY modify: `path/to/specific/file.ts`
+- DO NOT read: Any other files or directories
 - DO NOT touch: `other/paths`
 
 ## Pre-work
-1. List files that will be affected
-2. Identify dependencies
+1. Confirm the target file exists and is writable
+2. Identify exact lines/locations to change
+3. Confirm no other files are required
 
 ## Changes Required
-- Specific change 1
-- Specific change 2
+1. Specific change with before/after values
+2. Specific change with before/after values
 
 ## Acceptance Criteria
-- [ ] Criterion 1
-- [ ] Criterion 2
+- [ ] At least one real file change
+- [ ] Changes visible in `git diff`
+- [ ] If no change needed, task MUST fail (not DONE)
+
+## Verification
+```bash
+grep "expected_string" path/to/specific/file.ts
+```
 
 ## Completion
-When done, output: <promise>DONE</promise>
+Only when all criteria are met: <promise>TASK_DONE</promise>
 ```
 
 ## Best Practices
 
-- Be specific about file paths
-- Include clear boundaries (what NOT to change)
+- Be specific about file paths (max 1-2 files)
+- Include clear boundaries (ONLY modify / DO NOT read / DO NOT touch)
 - List acceptance criteria as checkboxes
-- Set realistic max_iterations (usually 10-30)
+- Require visible `git diff`
+- If a change already exists, the task must FAIL

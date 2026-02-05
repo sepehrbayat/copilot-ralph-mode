@@ -1,0 +1,68 @@
+# Coverage.py configuration
+# https://coverage.readthedocs.io/en/latest/config.html
+
+[run]
+# Source files to measure
+source = .
+# Measure branch coverage
+branch = true
+# Include all Python files
+include = 
+    ralph_mode.py
+# Files to exclude
+omit = 
+    tests/*
+    .venv/*
+    */__pycache__/*
+    */site-packages/*
+    setup.py
+# Enable parallel collection (useful for multiprocessing)
+parallel = true
+# Context for test differentiation
+dynamic_context = test_function
+
+[report]
+# Minimum acceptable coverage percentage
+fail_under = 85
+# Show files with missing lines
+show_missing = true
+# Exclude these patterns from coverage reports
+exclude_lines =
+    # Skip pragma
+    pragma: no cover
+    # Skip defensive assertions
+    raise AssertionError
+    raise NotImplementedError
+    # Skip abstract methods
+    @abstractmethod
+    # Skip if TYPE_CHECKING blocks
+    if TYPE_CHECKING:
+    # Skip __main__ block
+    if __name__ == .__main__.:
+    # Skip defensive code
+    \.\.\.
+    pass
+# Ignore errors during processing
+ignore_errors = true
+# Precision for percentages (2 decimal places)
+precision = 2
+# Sort by coverage percentage (ascending - worst first)
+sort = Cover
+
+[html]
+# Output directory for HTML reports
+directory = htmlcov
+# Title for HTML report
+title = Ralph Mode Coverage Report
+# Show contexts in HTML report
+show_contexts = true
+
+[xml]
+# Output file for XML reports (for CI tools)
+output = coverage.xml
+
+[json]
+# Output file for JSON reports
+output = coverage.json
+# Include summary in JSON
+pretty_print = true

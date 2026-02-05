@@ -3,8 +3,6 @@
   "dockerComposeFile": "docker-compose.yml",
   "service": "ralph-dev",
   "workspaceFolder": "/workspace",
-
-  // Features to add
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
@@ -15,8 +13,6 @@
       "upgradePackages": true
     }
   },
-
-  // VS Code settings
   "customizations": {
     "vscode": {
       "settings": {
@@ -55,31 +51,19 @@
       ]
     }
   },
-
-  // Lifecycle scripts
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "postStartCommand": "bash .devcontainer/post-start.sh",
-
-  // Forward ports (if needed for any web servers)
   "forwardPorts": [],
-
-  // Environment variables
   "remoteEnv": {
     "PYTHONDONTWRITEBYTECODE": "1",
     "PYTHONUNBUFFERED": "1",
     "PIP_DISABLE_PIP_VERSION_CHECK": "1",
     "RALPH_MODE_DEV": "1"
   },
-
-  // Mount options
   "mounts": [
     "source=${localWorkspaceFolder}/.git,target=/workspace/.git,type=bind,consistency=cached"
   ],
-
-  // Run as non-root user
   "remoteUser": "vscode",
-
-  // Host requirements
   "hostRequirements": {
     "cpus": 2,
     "memory": "4gb",

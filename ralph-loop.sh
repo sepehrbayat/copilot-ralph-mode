@@ -35,6 +35,7 @@ OUTPUT_FILE="$RALPH_DIR/output.txt"
 HISTORY_FILE="$RALPH_DIR/history.jsonl"
 SESSION_FILE="$RALPH_DIR/session.json"
 CHECKPOINT_FILE="$RALPH_DIR/checkpoint.json"
+LOG_FILE="$RALPH_DIR/ralph-loop.log"
 SLEEP_BETWEEN=2
 
 # Network resilience settings
@@ -48,6 +49,10 @@ MAX_CONSECUTIVE_FAILURES=3
 # Default model configuration
 DEFAULT_MODEL="gpt-5.2-codex"
 FALLBACK_MODEL="auto"
+
+# Default process limits
+DEFAULT_NPROC_LIMIT=65535
+DEFAULT_NOFILE_LIMIT=1048576
 
 # Permission flags
 ALLOW_ALL_TOOLS=true
@@ -65,6 +70,78 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Copilot CLI command
 COPILOT_CMD="copilot"
+
+# Ensure Copilot CLI is available
+ensure_copilot_cli() {
+    if command -v "$COPILOT_CMD" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if command -v gh >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️ Copilot CLI not found. Attempting to install gh-copilot extension...${NC}"
+        if gh extension install github/gh-copilot >/dev/null 2>&1 || gh extension upgrade github/gh-copilot >/dev/null 2>&1; then
+            if ! command -v "$COPILOT_CMD" >/dev/null 2>&1; then
+                echo -e "${YELLOW}⚠️ Creating copilot wrapper to gh copilot...${NC}"
+                sudo bash -c 'printf "#!/usr/bin/env bash\nexec gh copilot \"$@\"\n" > /usr/local/bin/copilot'
+                sudo chmod +x /usr/local/bin/copilot
+            fi
+        fi
+    fi
+
+    if ! command -v "$COPILOT_CMD" >/dev/null 2>&1; then
+        echo -e "${RED}❌ Copilot CLI is required but not found.${NC}"
+        echo -e "${YELLOW}Install it with: gh extension install github/gh-copilot${NC}"
+        return 1
+    fi
+    return 0
+}
+
+# Ensure process limits are high enough for Copilot CLI
+ensure_process_limits() {
+    local nproc_limit="${1:-$DEFAULT_NPROC_LIMIT}"
+    local nofile_limit="${2:-$DEFAULT_NOFILE_LIMIT}"
+    local current_nproc
+    local current_nofile
+
+    current_nproc=$(ulimit -u 2>/dev/null || echo "0")
+    current_nofile=$(ulimit -n 2>/dev/null || echo "0")
+
+    if [[ "$current_nproc" != "unlimited" ]] && [[ "$current_nproc" -lt "$nproc_limit" ]]; then
+        if ! ulimit -u "$nproc_limit" 2>/dev/null; then
+            echo -e "${YELLOW}⚠️ Unable to raise max user processes to $nproc_limit${NC}"
+        fi
+    fi
+
+    if [[ "$current_nofile" != "unlimited" ]] && [[ "$current_nofile" -lt "$nofile_limit" ]]; then
+        if ! ulimit -n "$nofile_limit" 2>/dev/null; then
+            echo -e "${YELLOW}⚠️ Unable to raise max open files to $nofile_limit${NC}"
+        fi
+    fi
+}
+
+# Logging helpers
+init_logging() {
+    mkdir -p "$RALPH_DIR"
+    touch "$LOG_FILE"
+}
+
+log_line() {
+    local level="$1"
+    local message="$2"
+    local ts
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    printf '%s [%s] %s\n' "$ts" "$level" "$message" >> "$LOG_FILE"
+}
+
+log_snapshot() {
+    log_line "INFO" "pid=$$"
+    log_line "INFO" "cwd=$PWD"
+    log_line "INFO" "user=$(id -u):$(id -g)"
+    log_line "INFO" "ulimit_nproc=$(ulimit -u 2>/dev/null || echo unknown)"
+    log_line "INFO" "ulimit_nofile=$(ulimit -n 2>/dev/null || echo unknown)"
+    log_line "INFO" "pids_max=$(cat /sys/fs/cgroup/pids.max 2>/dev/null || echo unknown)"
+    log_line "INFO" "pids_current=$(cat /sys/fs/cgroup/pids.current 2>/dev/null || echo unknown)"
+}
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -538,6 +615,8 @@ run_single() {
     local network_check="${4:-true}"
     
     check_active
+    init_logging
+    ensure_process_limits
     
     local iteration=$(get_iteration)
     local max_iter=$(get_max_iterations)
@@ -558,6 +637,7 @@ run_single() {
     echo -e "${CYAN}║          🔄 Ralph Iteration $iteration                              ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo -e "${CYAN}Model: $model (fallback: $fallback)${NC}"
+    log_line "INFO" "iteration=$iteration model=$model fallback=$fallback"
     if [[ -n "$agent" ]]; then
         echo -e "${CYAN}Agent: $agent${NC}"
     fi
@@ -596,12 +676,14 @@ run_single() {
     
     # Run Copilot CLI
     echo -e "${BLUE}🤖 Running GitHub Copilot CLI...${NC}"
+    log_line "INFO" "copilot_cmd=$COPILOT_CMD"
     
     local cmd="$COPILOT_CMD -p \"$context\" $copilot_opts $model_opts $agent_opts"
     
     if [[ "$dry_run" == "true" ]]; then
         echo -e "${YELLOW}[DRY RUN] Would execute:${NC}"
         echo "$cmd"
+        log_line "INFO" "dry_run_cmd=$cmd"
         return 0
     fi
     
@@ -610,6 +692,7 @@ run_single() {
     
     # Save checkpoint before execution
     save_checkpoint "iteration_started"
+    log_snapshot
     
     # Try with primary model, fallback if needed
     local exit_code=0
@@ -656,6 +739,13 @@ run_single() {
             break
         fi
     done
+
+    if [[ -f "$OUTPUT_FILE" ]]; then
+        printf '\n----- OUTPUT (iteration %s) -----\n' "$iteration" >> "$LOG_FILE"
+        cat "$OUTPUT_FILE" >> "$LOG_FILE" || true
+        printf '\n----- END OUTPUT (iteration %s) -----\n' "$iteration" >> "$LOG_FILE"
+    fi
+    log_line "INFO" "exit_code=$exit_code"
     
     # Clear checkpoint on success
     if [[ $exit_code -eq 0 ]]; then
@@ -709,6 +799,11 @@ run_loop() {
     local network_check="${5:-true}"
     
     check_active
+    init_logging
+    log_line "INFO" "loop_start"
+    log_snapshot
+    trap 'log_line "ERROR" "loop_exit code=$?"' EXIT
+    ensure_process_limits
     
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║              🔄 RALPH LOOP STARTING                      ║${NC}"
@@ -958,9 +1053,11 @@ main() {
     
     case "$cmd" in
         run|loop)
+            ensure_copilot_cli || exit 1
             run_loop "$dry_run" "$verbose" "$sleep_time" "$agent" "$network_check"
             ;;
         single|once)
+            ensure_copilot_cli || exit 1
             run_single "$dry_run" "$verbose" "$agent" "$network_check"
             ;;
         resume|continue)
