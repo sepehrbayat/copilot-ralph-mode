@@ -29,6 +29,7 @@
 - [Usage Modes](#-usage-modes)
 - [Commands Reference](#-commands-reference)
 - [Best Practices](#-best-practices)
+- [Field Notes (Real-World Trial)](#-field-notes-real-world-trial)
 - [File Structure](#-file-structure)
 - [MCP Server Integration](#-mcp-server-integration)
 - [Cross-Platform Support](#-cross-platform-support)
@@ -284,6 +285,16 @@ Ralph Mode uses these permission flags:
 # Restrict permissions
 ./ralph-loop.sh run --no-allow-tools --no-allow-paths
 ```
+
+---
+
+## 🧪 Field Notes (Real-World Trial)
+
+Real‑world lessons learned from running Ralph on a public repository are captured here:
+
+- [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md)
+
+Highlights include Copilot CLI install pitfalls, strict task scoping, and PR hygiene for upstream contributions.
 
 ---
 

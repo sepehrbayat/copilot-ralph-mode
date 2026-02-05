@@ -215,3 +215,17 @@ git diff --stat
 # Count modified files
 git diff --name-only | wc -l
 ```
+
+---
+
+## Part 9: Real-World Lessons (Quick Reference)
+
+- **Copilot CLI install**: use a user-writable prefix to avoid EACCES
+  - `npm config set prefix "$HOME/.local"`
+  - `NPM_CONFIG_PREFIX="$HOME/.local" npm install -g @github/copilot`
+- **Loop terminal**: avoid interactive prompts; they break unattended runs
+- **Batch mode**: always provide `tasks.json` for grouped tasks
+- **Target repo**: ensure `.ralph-mode/` exists before running the loop
+- **PR hygiene**: keep branch names neutral and use standard PR sections
+
+Full notes: [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md)
