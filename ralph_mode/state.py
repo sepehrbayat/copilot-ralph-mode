@@ -103,10 +103,12 @@ class RalphMode:
                 task_id = f"TASK-{idx + 1:03d}"
                 title = task
                 prompt = task
+                completion_promise = None
             else:
                 task_id = task.get("id") or f"TASK-{idx + 1:03d}"
                 title = task.get("title") or task.get("prompt") or task_id
                 prompt = task.get("prompt") or title
+                completion_promise = task.get("completion_promise")
 
             filename = self._task_filename(idx, task_id, title)
             task_path = self.tasks_dir / filename
@@ -114,7 +116,13 @@ class RalphMode:
             content = f"# {task_id} — {title}\n\n{prompt}\n"
             task_path.write_text(content, encoding="utf-8")
 
-            normalized.append({"id": task_id, "title": title, "prompt": prompt, "file": str(task_path)})
+            task_data = {"id": task_id, "title": title, "prompt": prompt, "file": str(task_path)}
+
+            # Preserve completion_promise if provided
+            if completion_promise:
+                task_data["completion_promise"] = completion_promise
+
+            normalized.append(task_data)
 
         return normalized
 
@@ -128,6 +136,11 @@ class RalphMode:
         state["current_task_id"] = current.get("id")
         state["current_task_title"] = current.get("title")
         state["current_task_file"] = current.get("file")
+
+        # Update completion_promise if task defines one
+        if "completion_promise" in current:
+            state["completion_promise"] = current.get("completion_promise")
+
         self.save_prompt(current.get("prompt") or current.get("title") or "")
 
     def log_iteration(self, iteration: int, status: str, notes: str = "") -> None:
@@ -548,7 +561,11 @@ All iterations are logged in `.ralph-mode/history.jsonl` for review.
         if self.check_completion(output_text):
             state = self.get_state() or {}
             if state.get("mode") == "batch":
-                self.next_task(reason="completed")
+                try:
+                    self.next_task(reason="completed")
+                except ValueError as exc:
+                    if "All tasks completed" not in str(exc):
+                        raise
                 return True
 
             self.disable()
@@ -578,7 +595,8 @@ All iterations are logged in `.ralph-mode/history.jsonl` for review.
         """Count entries in history file."""
         if not self.history_file.exists():
             return 0
-        return sum(1 for _ in open(self.history_file, encoding="utf-8"))
+        with open(self.history_file, encoding="utf-8") as f:
+            return sum(1 for _ in f)
 
     def get_history(self) -> list:
         """Get all history entries."""

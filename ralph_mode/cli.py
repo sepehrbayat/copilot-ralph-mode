@@ -296,7 +296,19 @@ def cmd_complete(args: argparse.Namespace) -> int:
     else:
         output = sys.stdin.read()
 
-    if ralph.complete(output):
+    try:
+        completed = ralph.complete(output)
+    except ValueError as e:
+        # In batch mode, completing the final task disables Ralph mode and raises
+        # ValueError("All tasks completed. Ralph mode disabled.") by design.
+        msg = str(e)
+        if "All tasks completed" in msg:
+            print(f"{colors.GREEN}✅ All tasks completed. Ralph mode disabled.{colors.NC}")
+            return 0
+        print(f"{colors.RED}❌ Error: {e}{colors.NC}")
+        return 1
+
+    if completed:
         state = ralph.get_state()
         if state and state.get("mode") == "batch":
             print(f"{colors.GREEN}✅ Completion promise detected! Moved to next task.{colors.NC}")
@@ -304,9 +316,9 @@ def cmd_complete(args: argparse.Namespace) -> int:
 
         print(f"{colors.GREEN}✅ Completion promise detected! Ralph mode disabled.{colors.NC}")
         return 0
-    else:
-        print(f"{colors.YELLOW}⚠️ No completion promise found. Continue iterating.{colors.NC}")
-        return 1
+
+    print(f"{colors.YELLOW}⚠️ No completion promise found. Continue iterating.{colors.NC}")
+    return 1
 
 
 def cmd_history(args: argparse.Namespace) -> int:

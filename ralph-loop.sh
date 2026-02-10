@@ -537,7 +537,6 @@ get_max_iterations() {
 get_promise() {
     get_state "completion_promise"
 }
-
 # Get model from state
 get_model() {
     local model=$(get_state "model")
@@ -577,18 +576,53 @@ build_copilot_opts() {
     # Denied tools (--deny-tool takes precedence)
     if [[ -n "$DENIED_TOOLS" ]]; then
         for tool in $DENIED_TOOLS; do
-            opts="$opts --deny-tool '$tool'"
+            # Do not embed extra quotes; this value is already a single shell token.
+            opts="$opts --deny-tool $tool"
         done
     fi
 
     # Additional allowed tools
     if [[ -n "$ALLOWED_TOOLS_EXTRA" ]]; then
         for tool in $ALLOWED_TOOLS_EXTRA; do
-            opts="$opts --allow-tool '$tool'"
+            # Do not embed extra quotes; this value is already a single shell token.
+            opts="$opts --allow-tool $tool"
         done
     fi
 
     echo "$opts"
+}
+
+# Check whether an output file contains the completion promise.
+# Uses the same parsing semantics as the Python implementation (strip + compare)
+# but does NOT mutate state.
+output_has_promise() {
+    local promise="$1"
+    local output_file="$2"
+
+    if [[ -z "$promise" || ! -f "$output_file" ]]; then
+        return 1
+    fi
+
+    PROMISE="$promise" OUTPUT_FILE="$output_file" python3 <<'PY'
+import re
+import sys
+import os
+
+promise = os.environ.get('PROMISE', '').strip()
+output_file = os.environ.get('OUTPUT_FILE', '')
+
+if not promise or not output_file:
+    sys.exit(1)
+
+try:
+    with open(output_file, 'r') as f:
+        text = f.read()
+except Exception:
+    sys.exit(1)
+
+matches = re.findall(r"<promise>(.*?)</promise>", text, re.DOTALL)
+sys.exit(0 if any(m.strip() == promise for m in matches) else 1)
+PY
 }
 
 # Get prompt
@@ -816,6 +850,7 @@ run_single() {
     local exit_code=0
     local max_network_retries=3
     local network_retry_count=0
+    local promise_detected=false
 
     while [[ $network_retry_count -lt $max_network_retries ]]; do
         if timeout 600 $COPILOT_ENV_PREFIX $COPILOT_CMD -p "$context" $copilot_opts $model_opts $agent_opts 2>&1 | tee "$OUTPUT_FILE"; then
@@ -864,7 +899,18 @@ run_single() {
         printf '\n----- END OUTPUT (iteration %s) -----\n' "$iteration" >> "$LOG_FILE"
     fi
 
-    if [[ "$SKIP_CHANGE_CHECK" != "1" && $exit_code -eq 0 ]]; then
+    # Detect completion promise early (robust to whitespace/newlines).
+    log_line "DEBUG" "promise='$promise' OUTPUT_FILE='$OUTPUT_FILE'"
+    if output_has_promise "$promise" "$OUTPUT_FILE"; then
+        log_line "INFO" "promise_detected=true promise='$promise'"
+        promise_detected=true
+    else
+        log_line "DEBUG" "promise_not_detected promise='$promise'"
+    fi
+
+    # If Copilot signaled completion, prefer that over the change-check heuristic.
+    # (Some tasks may legitimately be satisfied with no net new changes.)
+    if [[ "$SKIP_CHANGE_CHECK" != "1" && $exit_code -eq 0 && "$promise_detected" != "true" ]]; then
         if ! detect_changes; then
             echo -e "${YELLOW}⚠️ No file changes detected. Marking iteration as failed.${NC}"
             log_line "WARN" "no_changes_detected=true"
@@ -914,7 +960,9 @@ run_single() {
     echo "{\"last_iteration\": $iteration, \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$SESSION_FILE"
 
     # Check for completion promise in output
-    if [[ -n "$promise" ]] && grep -q "<promise>$promise</promise>" "$OUTPUT_FILE" 2>/dev/null; then
+    log_line "DEBUG" "checking_complete promise='$promise' promise_detected='$promise_detected'"
+    if [[ -n "$promise" && "$promise_detected" == "true" ]]; then
+        log_line "INFO" "promise_complete_block_entered=true"
         echo ""
         echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
         echo -e "${GREEN}✅ COMPLETION PROMISE DETECTED!${NC}"
@@ -927,7 +975,8 @@ run_single() {
         run_hook "on-completion"
 
         # Complete the task
-        python3 "$SCRIPT_DIR/ralph_mode.py" complete "$(cat "$OUTPUT_FILE")" || true
+        # Avoid argv length limits and preserve output as-is.
+        python3 "$SCRIPT_DIR/ralph_mode.py" complete < "$OUTPUT_FILE" || true
         return 0
     fi
 

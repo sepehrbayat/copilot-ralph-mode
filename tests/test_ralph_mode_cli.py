@@ -290,6 +290,41 @@ class TestCmdComplete:
 
         assert result == 0
 
+    def test_complete_batch_final_task_returns_success(self, temp_cwd, mock_args, capsys):
+        """Completing the final task in batch mode should return success (not crash)."""
+        tasks_file = Path("tasks.json")
+        tasks_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": "B-001",
+                        "title": "Batch One",
+                        "prompt": (
+                            "## Objective\nFinish the only task.\n\n"
+                            "## Scope\n- ONLY modify: (none)\n- DO NOT read: (none)\n- DO NOT touch: (none)\n\n"
+                            "## Pre-work\nNone\n\n"
+                            "## Changes Required\nNone\n\n"
+                            "## Acceptance Criteria\nTask is complete\n\n"
+                            "## Verification\nNone\n\n"
+                            "## Completion\nOutput: <promise>DONE</promise>\n"
+                        ),
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        # Start batch mode with a single task.
+        args = mock_args(tasks_file=str(tasks_file), max_iterations=5, completion_promise="DONE")
+        assert cmd_batch_init(args) == 0
+
+        # Completing should disable Ralph mode and return success.
+        complete_args = mock_args(output=["<promise>DONE</promise>"])
+        result = cmd_complete(complete_args)
+
+        assert result == 0
+        assert not Path(".ralph-mode").exists()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CMD_HISTORY TESTS

@@ -5,6 +5,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+def _find_git_root(start: Path) -> Optional[Path]:
+    """Find nearest git root (directory containing .git) from start."""
+    current = start.resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
 class TaskLibrary:
     """Task library manager for loading tasks from files."""
 
@@ -13,7 +22,13 @@ class TaskLibrary:
 
     def __init__(self, base_path: Optional[Path] = None) -> None:
         """Initialize task library."""
-        self.base_path = Path(base_path) if base_path else Path(__file__).parent.parent
+        if base_path:
+            self.base_path = Path(base_path)
+        else:
+            # Default to the current git repository root when available.
+            # This enables using Ralph Mode task libraries inside nested repos
+            # (e.g. /workspace/hooshex-ai) without changing code.
+            self.base_path = _find_git_root(Path.cwd()) or Path(__file__).resolve().parent.parent
         self.tasks_dir = self.base_path / self.TASKS_DIR
         self.groups_dir = self.tasks_dir / self.GROUPS_DIR
 
@@ -36,6 +51,9 @@ class TaskLibrary:
                             # Handle arrays
                             if value_str.startswith("[") and value_str.endswith("]"):
                                 frontmatter[key] = [v.strip().strip("\"'") for v in value_str[1:-1].split(",")]
+                            # Handle quoted scalars
+                            elif len(value_str) >= 2 and value_str[0] == value_str[-1] and value_str[0] in ('"', "'"):
+                                frontmatter[key] = value_str[1:-1]
                             # Handle numbers
                             elif value_str.isdigit():
                                 frontmatter[key] = int(value_str)
@@ -102,14 +120,17 @@ class TaskLibrary:
             if exact_path.exists():
                 return self.parse_task_file(exact_path)
 
-        # Search by ID or title
-        for task in self.list_tasks():
+        # Search by ID or filename first (exact match, case-insensitive)
+        tasks = self.list_tasks()
+        for task in tasks:
             task_id = str(task.get("id", "")).lower()
-            task_title = str(task.get("title", "")).lower()
             task_file = Path(task.get("file", "")).stem.lower()
-
             if identifier_lower in [task_id, task_file]:
                 return task
+
+        # Fallback: partial match by title
+        for task in tasks:
+            task_title = str(task.get("title", "")).lower()
             if identifier_lower in task_title:
                 return task
 
