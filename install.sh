@@ -77,11 +77,12 @@ fi
 
 # Check GitHub Copilot CLI (optional)
 echo -e "${BLUE}[3/5]${NC} Checking GitHub Copilot CLI..."
-if command -v gh &> /dev/null && gh copilot --version &> /dev/null 2>&1; then
+if command -v copilot &> /dev/null && copilot --version &> /dev/null 2>&1; then
     echo -e "  ${GREEN}✓${NC} GitHub Copilot CLI found"
 else
     echo -e "  ${YELLOW}!${NC} GitHub Copilot CLI not found (optional)"
-    echo "      Install later: gh extension install github/gh-copilot"
+    echo "      Install later: npm install -g @github/copilot"
+    echo "      Or (legacy): gh extension install github/gh-copilot"
 fi
 
 # Installation directory

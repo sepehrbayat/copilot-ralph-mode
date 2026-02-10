@@ -3,19 +3,17 @@
 
 [run]
 # Source files to measure
-source = .
+source = ralph_mode
 # Measure branch coverage
 branch = true
-# Include all Python files
-include = 
-    ralph_mode.py
 # Files to exclude
-omit = 
+omit =
     tests/*
     .venv/*
     */__pycache__/*
     */site-packages/*
     setup.py
+    ralph_mode.py
 # Enable parallel collection (useful for multiprocessing)
 parallel = true
 # Context for test differentiation

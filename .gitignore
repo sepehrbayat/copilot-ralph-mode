@@ -10,6 +10,12 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
 
 # OS
 .DS_Store
@@ -29,3 +35,21 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Node / npm
+.npmrc
+
+# Testing & Coverage
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+coverage.json
+.tox/
+.nox/
+.benchmarks/
+
+# Mypy
+.mypy_cache/

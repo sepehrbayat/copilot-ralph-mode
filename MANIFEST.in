@@ -1,0 +1,45 @@
+# MANIFEST.in - Controls what goes into source distributions (sdist)
+#
+# This ensures that non-Python files required for the package to work
+# correctly are included when building source distributions.
+
+# Include top-level metadata
+include LICENSE
+include README.md
+include CONTRIBUTING.md
+include pyproject.toml
+include requirements.txt
+include requirements-dev.txt
+
+# Include shell wrappers and installers
+include ralph-mode.sh
+include ralph-mode.cmd
+include ralph-mode.ps1
+include ralph-loop.sh
+include install.sh
+include install.cmd
+include install.ps1
+include Makefile
+
+# Include the PEP 561 type marker
+include ralph_mode/py.typed
+
+# Include task templates
+recursive-include tasks *.md *.json
+
+# Exclude development / CI artifacts
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .DS_Store
+prune .ralph-mode
+prune .venv
+prune .git
+prune .github
+prune htmlcov
+prune .hypothesis
+prune .pytest_cache
+prune .mypy_cache
+prune .benchmarks
+prune hooshex-ai
+prune paqet
+prune manual-e2e

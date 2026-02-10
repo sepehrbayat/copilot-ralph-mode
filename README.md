@@ -4,7 +4,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-Copilot-blue)](https://github.com/features/copilot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![Cross-Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
 [![Copilot CLI](https://img.shields.io/badge/Copilot%20CLI-Compatible-brightgreen.svg)]()
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Sepehr%20Bayat-blue?logo=linkedin)](https://www.linkedin.com/in/sepehrbayat/)
@@ -102,6 +102,8 @@ sudo apt install gh
 winget install GitHub.cli
 
 # Install GitHub Copilot CLI
+# Recommended:
+#   npm install -g @github/copilot
 # See: https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
 
 # Authenticate
@@ -109,6 +111,10 @@ gh auth login
 
 # Verify Copilot CLI access
 copilot --help
+
+# ⚠️ If GITHUB_TOKEN is set, Copilot CLI may fail auth (401).
+# Unset it for CLI usage:
+#   unset GITHUB_TOKEN
 ```
 
 ### Installation
@@ -1124,6 +1130,7 @@ your-project/
 │   ├── INSTRUCTIONS.md       # Instructions for AI
 │   ├── history.jsonl         # Log of all iterations
 │   ├── output.txt            # Last Copilot CLI output
+│   ├── summary.md            # Iteration summary report
 │   ├── session.json          # Session info for resume
 │   ├── checkpoint.json       # Network resilience checkpoint
 │   └── tasks/                # Task files (batch mode)

@@ -152,10 +152,13 @@ python3 /ralph-mode/ralph_mode.py run --group rtl
 
 - [ ] Copilot account active with sufficient quota
 - [ ] Running from project root (not ralph-mode folder)
+- [ ] Copilot CLI authenticated (`copilot login` if needed)
+- [ ] `GITHUB_TOKEN` unset unless you explicitly want it used by Copilot CLI
 - [ ] Tasks are scoped and specific
 - [ ] Loop terminal is dedicated (no other commands)
 - [ ] Target files exist and are writable
 - [ ] Git initialized (for diff verification)
+- [ ] Optional: verification commands are present in task `## Verification`
 
 ---
 
@@ -166,9 +169,12 @@ python3 /ralph-mode/ralph_mode.py run --group rtl
 | Only read/grep, no changes | Make task more specific, add "ONLY modify" |
 | batch-init error | Use `--tasks-file` (tasks-dir not supported) |
 | Quota error | Copilot needs subscription/charge |
+| 401 / Failed to list models | Run `copilot login` and unset `GITHUB_TOKEN` |
 | Loop exits immediately | Check `completion_promise` format |
 | No diff after completion | Task was already satisfied, redesign it |
 | Permission denied | Check file ownership in Docker |
+| Verification fails | Run `./ralph-loop.sh verify` to isolate and debug |
+| Iteration fails with "No file changes detected" | Make task more specific or set `RALPH_SKIP_CHANGE_CHECK=1` to bypass |
 
 ---
 
@@ -229,3 +235,38 @@ git diff --name-only | wc -l
 - **PR hygiene**: keep branch names neutral and use standard PR sections
 
 Full notes: [docs/LESSONS_LEARNED.md](docs/LESSONS_LEARNED.md)
+
+---
+
+## Part 10: Security Scanning (CodeQL Integration)
+
+Ralph Mode includes optional security scanning via CodeQL or grep-based fallback.
+
+### Quick usage
+
+```bash
+# Auto-detect language, scan entire project
+python3 ralph_mode.py scan
+
+# Scan only changed files, quiet mode
+python3 ralph_mode.py scan --changed-only --quiet
+
+# Explicit language
+python3 ralph_mode.py scan --language python
+```
+
+### Integration options
+
+| Method | How to enable | Blocking? |
+|--------|---------------|-----------|
+| CLI on-demand | `ralph_mode.py scan` | No |
+| Post-iteration hook | Set `RALPH_CODEQL_SCAN=1` | No |
+| Security agent | `@security scan the project` | No |
+
+### How it works
+
+1. **Language detection** — auto-detects from `package.json`, `go.mod`, `pyproject.toml`, etc.
+2. **CodeQL path** — if `codeql` is on PATH: creates database → runs security suite → outputs SARIF
+3. **Grep fallback** — if no CodeQL: pattern-matches common vulnerabilities (eval, exec, innerHTML, etc.)
+4. **Memory** — saves results to Ralph memory bank as episodic memories
+5. **Non-blocking** — never fails the iteration; always returns 0 unless critical errors found

@@ -10,6 +10,8 @@ This document captures practical learnings from a full, end‑to‑end run on a 
   - `npm config set prefix "$HOME/.local"`
   - `NPM_CONFIG_PREFIX="$HOME/.local" npm install -g @github/copilot`
 - **Prefer the `copilot` command** (not `gh copilot`) for Ralph loops to avoid download prompts.
+- **Avoid `GITHUB_TOKEN` for Copilot CLI** unless you explicitly want token auth — it can cause 401s. Unset it for CLI usage:
+  - `unset GITHUB_TOKEN`
 - **Avoid interactive prompts** in loop terminals; they can block the run and break automation.
 
 ---
@@ -27,6 +29,7 @@ This document captures practical learnings from a full, end‑to‑end run on a 
 - **Run from project root** and keep a **dedicated terminal** for the loop.
 - **Ensure `.ralph-mode/` exists** in the target project; missing directories can break loop logging.
 - **Use batch mode with a tasks.json** when running grouped tasks.
+- **No-change iterations now fail** (read-only behavior). Set `RALPH_SKIP_CHANGE_CHECK=1` to bypass when verifying-only.
 
 ---
 

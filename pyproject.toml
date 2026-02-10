@@ -4,16 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "copilot-ralph-mode"
-version = "1.0.0"
+version = "1.1.0"
 description = "Implementation of the Ralph Wiggum technique for iterative AI development loops with GitHub Copilot CLI"
 readme = "README.md"
-license = {text = "MIT"}
-authors = [
-    {name = "Sepehr Bayat", email = "sepehr@example.com"}
-]
-maintainers = [
-    {name = "Sepehr Bayat", email = "sepehr@example.com"}
-]
+license = { text = "MIT" }
+authors = [{ name = "Sepehr Bayat", email = "sepehr@example.com" }]
+maintainers = [{ name = "Sepehr Bayat", email = "sepehr@example.com" }]
 keywords = [
     "copilot",
     "github-copilot",
@@ -22,10 +18,10 @@ keywords = [
     "ai-development",
     "automation",
     "development-loop",
-    "cross-platform"
+    "cross-platform",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
@@ -35,6 +31,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
     "Topic :: Software Development",
     "Topic :: Software Development :: Build Tools",
     "Topic :: Utilities",
@@ -63,7 +61,7 @@ test = [
 ]
 
 [project.scripts]
-ralph-mode = "ralph_mode:main"
+ralph-mode = "ralph_mode.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/sepehrbayat/copilot-ralph-mode"
@@ -72,11 +70,12 @@ Repository = "https://github.com/sepehrbayat/copilot-ralph-mode.git"
 Issues = "https://github.com/sepehrbayat/copilot-ralph-mode/issues"
 Changelog = "https://github.com/sepehrbayat/copilot-ralph-mode/releases"
 
-[tool.setuptools]
-py-modules = ["ralph_mode"]
-
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["ralph_mode*"]
+
+[tool.setuptools.package-data]
+ralph_mode = ["py.typed"]
 
 [tool.black]
 line-length = 120
@@ -130,11 +129,7 @@ source = ["ralph_mode"]
 branch = true
 parallel = true
 dynamic_context = "test_function"
-omit = [
-    "tests/*",
-    ".venv/*",
-    "*/__pycache__/*",
-]
+omit = ["tests/*", ".venv/*", "*/__pycache__/*"]
 
 [tool.coverage.report]
 fail_under = 85

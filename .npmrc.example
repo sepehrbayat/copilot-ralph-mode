@@ -1,0 +1,5 @@
+# Example npm config for GitHub Packages (DO NOT COMMIT TOKENS)
+@github:registry=https://npm.pkg.github.com
+
+# Use an environment variable for auth
+//npm.pkg.github.com/:_authToken=${NPM_TOKEN}

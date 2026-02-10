@@ -103,6 +103,78 @@ Each iteration:
 
 ---
 
+## Memory System (mem0-inspired)
+
+Ralph Mode includes a multi-level memory system inspired by [mem0](https://github.com/mem0ai/mem0) that persists knowledge across iterations.
+
+### Memory Levels
+
+| Level | Purpose | Persistence |
+|-------|---------|-------------|
+| **Working** | Current iteration scratch notes | Cleared each iteration |
+| **Episodic** | Per-iteration summaries (what happened, what changed) | Survives across iterations |
+| **Semantic** | Extracted facts, patterns, relationships | Survives across tasks |
+| **Procedural** | Learned workflows ("to fix X, run Y then Z") | Long-term |
+
+### Memory Categories
+
+`file_changes`, `errors`, `decisions`, `blockers`, `progress`, `patterns`, `dependencies`, `test_results`, `environment`, `task_context`
+
+### How Memory Works in the Loop
+
+Each iteration automatically:
+1. **Clears** working memory (fresh start)
+2. Runs the AI with full context including Memory Bank
+3. **Extracts** episodic memories from output (files changed, errors, test results)
+4. **Extracts** semantic facts (dependencies, decisions, fix patterns)
+5. **Decays** old memory scores (recency bias)
+6. **Promotes** frequently-accessed episodic memories to semantic
+
+### Using Memory from CLI
+
+```bash
+python3 ralph_mode.py memory stats       # View memory bank statistics
+python3 ralph_mode.py memory show        # Display formatted memory for context
+python3 ralph_mode.py memory search "auth login"  # Search by relevance
+python3 ralph_mode.py memory add "project uses React" --category dependencies
+python3 ralph_mode.py memory extract     # Extract from last output
+python3 ralph_mode.py memory decay       # Apply temporal decay
+python3 ralph_mode.py memory promote     # Promote episodic → semantic
+python3 ralph_mode.py memory reset       # Clear all memories
+```
+
+---
+
+## File Editing Best Practices
+
+### BEFORE Editing
+
+1. **Read first** — always read the file (or relevant section) before editing.
+2. **Check git** — run `git diff` to see if a previous iteration already made changes.
+3. **Check Memory Bank** — search for prior edits to the same file.
+
+### WHEN Editing
+
+1. Use precise, targeted edits — replace only the lines that need to change.
+2. Include enough context (3+ surrounding lines) to anchor the edit uniquely.
+3. Preserve whitespace, indentation, and coding style.
+4. Never guess at file contents — always read before editing.
+
+### AFTER Editing
+
+1. **Verify** — read the modified section back to confirm correctness.
+2. **Test** — run relevant tests or linters if available.
+3. **Record** — note what you changed in progress.
+
+### Common Mistakes
+
+- Editing without reading first (stale content).
+- Remaking changes that already exist from a previous iteration.
+- Using `...existing code...` placeholders instead of actual content.
+- Trying to edit too many lines at once — split into smaller edits.
+
+---
+
 ## Copilot CLI Integration
 
 ### Slash Commands

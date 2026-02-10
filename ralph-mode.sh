@@ -12,6 +12,6 @@ if command -v python3 >/dev/null 2>&1; then
 elif command -v python >/dev/null 2>&1; then
   exec python "$SCRIPT_DIR/ralph_mode.py" "$@"
 else
-  echo "❌ Python is required. Please install Python 3.7+." >&2
+  echo "❌ Python is required. Please install Python 3.9+." >&2
   exit 1
 fi
