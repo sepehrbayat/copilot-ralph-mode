@@ -694,9 +694,9 @@ REVIEW_EOF
 
     local review_output_file="${RALPH_DIR}/review-output.txt"
 
-    # Run Copilot CLI with code-review agent (use file input to avoid arg list too long)
+    # Run Copilot CLI for critic review (no --agent, use default)
     echo -e "${BLUE}🤖 Running critic review...${NC}"
-    if cat "$review_prompt_file" | timeout 300 $COPILOT_ENV_PREFIX $COPILOT_CMD $copilot_opts $model_opts --agent=code-review 2>&1 | tee "$review_output_file"; then
+    if cat "$review_prompt_file" | timeout 300 $COPILOT_ENV_PREFIX $COPILOT_CMD $copilot_opts $model_opts 2>&1 | tee "$review_output_file"; then
         echo ""
     else
         echo -e "${YELLOW}⚠️ Review agent failed to run, defaulting to REJECTED (iterate more)${NC}"
