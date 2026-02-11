@@ -74,8 +74,8 @@ ALLOWED_TOOLS_EXTRA=""
 # Hooks directory
 HOOKS_DIR=".github/hooks"
 
-# Add copilot to PATH if needed
-export PATH="$HOME/.local/bin:$PATH"
+# Add copilot and Flutter/Dart to PATH if needed
+export PATH="/opt/flutter/bin:$HOME/.local/bin:$PATH"
 
 # Copilot CLI command
 COPILOT_CMD="copilot"
@@ -797,6 +797,24 @@ _build_context_fallback() {
 
     local context="# Ralph Mode — Iteration $iteration"
     [[ "$max_iter" -gt 0 ]] && context="$context / $max_iter"
+
+    # ── CRITICAL: Review issues go FIRST so the doer cannot ignore them ──
+    if [[ -f "${RALPH_DIR}/review-issues.txt" ]]; then
+        context="$context
+
+## 🚨🚨🚨 MANDATORY FIX — PREVIOUS COMPLETION WAS REJECTED 🚨🚨🚨
+Your LAST completion claim was **REJECTED** by the critic agent. You MUST fix ALL of the following issues before doing anything else. Do NOT just grep for keywords — actually READ the files and FIX the problems.
+
+$(cat "${RALPH_DIR}/review-issues.txt" 2>/dev/null)
+
+**INSTRUCTIONS:**
+1. Fix EVERY issue listed above by making actual file edits
+2. After fixing, RE-READ each file to verify the fix is applied
+3. Do NOT output the completion promise until ALL issues are resolved
+4. Running grep and claiming 'everything is fine' will be REJECTED again
+"
+    fi
+
     context="$context
 
 ## Task
@@ -810,6 +828,7 @@ $prompt
 5. **Do NOT claim completion prematurely.** Your work will be reviewed by a critic agent.
 6. **Verify ALL acceptance criteria** before outputting the completion promise.
 7. Create REAL, working code — not skeletons, placeholders, or TODOs.
+8. **If review issues exist above, FIX THEM FIRST.** Do not ignore critic feedback.
 
 ## Repository State
 \`\`\`
@@ -831,15 +850,11 @@ $(tail -n 80 "$OUTPUT_FILE" 2>/dev/null || echo '<none>')
 "
     fi
 
-    # Include review issues from a previous critic rejection
-    if [[ -f "${RALPH_DIR}/review-issues.txt" ]]; then
+    # Include environment notes if available
+    if [[ -f "${RALPH_DIR}/environment-notes.md" ]]; then
         context="$context
-## ⚠️ PREVIOUS REVIEW REJECTION — FIX THESE ISSUES
-Your previous completion claim was REJECTED by the critic. Address these issues:
-\`\`\`
-$(cat "${RALPH_DIR}/review-issues.txt" 2>/dev/null)
-\`\`\`
-Fix ALL listed issues before claiming completion again.
+## Environment & Available Resources
+$(cat "${RALPH_DIR}/environment-notes.md" 2>/dev/null)
 "
     fi
 
@@ -854,6 +869,7 @@ When ALL acceptance criteria are met, output exactly:
 ⚠️ Your output will be reviewed by a CRITIC AGENT before acceptance.
 ⚠️ Skeleton code, placeholders, or incomplete implementations will be REJECTED.
 ⚠️ Minimum $MIN_ITERATIONS iterations required before completion is accepted.
+⚠️ If there were review issues listed above, you MUST have fixed ALL of them with actual file edits before claiming completion. Running grep to 'verify' without fixing is not acceptable.
 "
     fi
 
