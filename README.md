@@ -26,6 +26,7 @@
 - [Hooks](#-hooks)
 - [Security Considerations](#-security-considerations)
 - [Network Resilience](#-network-resilience)
+- [Quality Gates](#-quality-gates)
 - [Usage Modes](#-usage-modes)
 - [Commands Reference](#-commands-reference)
 - [Best Practices](#-best-practices)
@@ -697,6 +698,119 @@ If **3 consecutive iterations** fail (even with network available), Ralph will:
 # After fixing the issue, resume
 ./ralph-loop.sh resume
 ```
+
+---
+
+## ✅ Quality Gates
+
+Ralph Mode includes **multi-agent verification** to ensure task completion quality. This prevents premature task completion and enforces thorough review.
+
+### How Quality Gates Work
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Quality Gate Flow                       │
+│                                                             │
+│   ┌────────────┐     ┌─────────────┐     ┌───────────┐     │
+│   │   Doer    │────▶│  Promise   │────▶│   Gate 1  │     │
+│   │  Works   │     │  Detected  │     │ Min Iter? │     │
+│   └────────────┘     └─────────────┘     └─────┬─────┘     │
+│                                          │               │
+│                      ┌──────────────────┘               │
+│                      │                                   │
+│              [iter < MIN]              [iter >= MIN]       │
+│                      │                        │            │
+│                      ▼                        ▼            │
+│              ┌───────────┐          ┌─────────────┐       │
+│              │  Reject  │          │   Gate 2   │       │
+│              │ (iterate)│          │   Critic   │       │
+│              └───────────┘          └──────┬──────┘       │
+│                                       │               │
+│                      ┌─────────────────┴──────────┐     │
+│                      │                          │     │
+│              [REJECTED]                  [APPROVED]     │
+│                      │                          │     │
+│                      ▼                          ▼     │
+│              ┌───────────┐          ┌─────────────┐   │
+│              │ Save     │          │  Complete  │   │
+│              │ Issues   │          │  Task! ✅  │   │
+│              └─────┬─────┘          └─────────────┘   │
+│                    │                               │
+│                    ▼                               │
+│              [Next iteration sees issues]            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Gate 1: Minimum Iterations
+
+Prevents premature completion claims. By default, tasks must run for at least **2 iterations** before a completion promise is accepted.
+
+```bash
+# Set minimum iterations via environment variable
+export RALPH_MIN_ITERATIONS=3
+./ralph-loop.sh run
+```
+
+When the AI claims completion too early:
+```
+🔔 COMPLETION PROMISE DETECTED — Starting verification...
+⚠️ Minimum iterations not met (1 < 2). Rejecting early completion.
+🔄 Ralph iteration: 2
+```
+
+### Gate 2: Critic Verification
+
+After passing the minimum iterations check, a **Critic Agent** reviews the work:
+
+1. **Checks git diff** for actual code changes
+2. **Verifies each acceptance criterion** from the task
+3. **Runs commands** to confirm files exist and have correct content
+4. **Issues verdict**: `APPROVED` or `REJECTED`
+
+```
+╔══════════════════════════════════════════════════════════╗
+║     🔍 VERIFICATION REVIEW (Critic Agent)                ║
+╚══════════════════════════════════════════════════════════╝
+🤖 Running critic review...
+✅ Critic APPROVED the completion
+
+═══════════════════════════════════════════════════════════
+✅ VERIFIED AND APPROVED BY CRITIC!
+═══════════════════════════════════════════════════════════
+```
+
+### Rejection & Issue Tracking
+
+When the Critic rejects a completion:
+
+1. Issues are saved to `.ralph-mode/review-issues.txt`
+2. Next iteration context includes these issues prominently
+3. The AI is instructed to fix all listed issues before claiming completion again
+
+```markdown
+## ⚠️ PREVIOUS REVIEW REJECTION — FIX THESE ISSUES
+Your previous completion claim was REJECTED by the critic. Address these issues:
+- Missing test coverage for edge cases
+- pubspec.yaml has incorrect SDK version
+Fix ALL listed issues before claiming completion again.
+```
+
+### Configuration
+
+```bash
+# Disable quality gates (not recommended)
+export RALPH_MIN_ITERATIONS=0
+
+# Increase minimum iterations for complex tasks
+export RALPH_MIN_ITERATIONS=5
+```
+
+### Why Quality Gates Matter
+
+- **Prevents 1-iteration completions** — AI can't just claim "done" without thorough work
+- **Multi-agent review** — A separate reviewer catches issues the doer missed
+- **Issue persistence** — Rejected issues carry forward until addressed
+- **Real verification** — Critic runs actual commands to verify file existence and content
 
 ---
 
