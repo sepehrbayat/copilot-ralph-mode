@@ -53,7 +53,7 @@ NETWORK_RETRY_MULTIPLIER=2
 MAX_CONSECUTIVE_FAILURES=3
 
 # Default model configuration
-DEFAULT_MODEL="claude-sonnet-4-5"
+DEFAULT_MODEL="claude-sonnet-4.5"
 FALLBACK_MODEL="auto"
 
 # Minimum iterations before accepting completion promise
