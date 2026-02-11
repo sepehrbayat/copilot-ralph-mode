@@ -53,8 +53,11 @@ NETWORK_RETRY_MULTIPLIER=2
 MAX_CONSECUTIVE_FAILURES=3
 
 # Default model configuration
-DEFAULT_MODEL="gpt-5.2-codex"
+DEFAULT_MODEL="claude-sonnet-4-5"
 FALLBACK_MODEL="auto"
+
+# Minimum iterations before accepting completion promise
+MIN_ITERATIONS="${RALPH_MIN_ITERATIONS:-2}"
 
 # Default process limits
 DEFAULT_NPROC_LIMIT=65535
@@ -625,6 +628,140 @@ sys.exit(0 if any(m.strip() == promise for m in matches) else 1)
 PY
 }
 
+# ═══════════════════════════════════════════════════════════════
+# Multi-Agent Verification (Doer → Critic → Arbiter)
+# ═══════════════════════════════════════════════════════════════
+
+# Run verification review using critic/code-review agent.
+# Returns 0 if APPROVED, 1 if REJECTED.
+run_verification_review() {
+    local iteration="$1"
+    local promise="$2"
+    local output_file="$3"
+    local model=$(get_model)
+    local fallback=$(get_fallback_model)
+    local copilot_opts=$(build_copilot_opts)
+
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║     🔍 VERIFICATION REVIEW (Critic Agent)                ║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
+    log_line "INFO" "verification_review_start iteration=$iteration"
+
+    # Gather evidence for the critic
+    local task_prompt=$(get_prompt)
+    local git_diff=$(git diff HEAD~1 2>/dev/null | head -300 || echo "<no diff>")
+    local git_status=$(git status --short 2>/dev/null | head -50 || echo "<clean>")
+    local last_output=$(tail -100 "$output_file" 2>/dev/null || echo "<no output>")
+    local files_changed=$(git diff --name-only HEAD~1 2>/dev/null | head -30 || echo "<none>")
+
+    # Build the review prompt
+    local review_context="# Critical Review — Iteration $iteration
+
+You are a **CODE REVIEWER / CRITIC**. Your job is to verify whether the task below has GENUINELY been completed.
+
+## Original Task
+$task_prompt
+
+## Files Changed
+\`\`\`
+$files_changed
+\`\`\`
+
+## Changes Made (git diff, first 300 lines)
+\`\`\`
+$git_diff
+\`\`\`
+
+## Current File Status
+\`\`\`
+$git_status
+\`\`\`
+
+## Doer's Last Output (tail)
+\`\`\`
+$last_output
+\`\`\`
+
+## Your Review Instructions
+
+1. **Verify EACH acceptance criterion** from the task against the ACTUAL code changes
+2. **Check files actually exist** — run \`ls\` or \`cat\` to confirm they were created
+3. **Look for placeholders** — TODO comments, empty functions, skeleton code = REJECT
+4. **Check imports and syntax** — would this code actually compile/run?
+5. **Assess completeness** — does this fully implement the task, not just scaffold it?
+6. **Check quality** — is this production-grade or just minimal boilerplate?
+
+## Your Verdict
+
+If the task is GENUINELY and FULLY complete with real, working code:
+\`\`\`
+<verdict>APPROVED</verdict>
+\`\`\`
+
+If there are issues, missing work, or low quality:
+\`\`\`
+<verdict>REJECTED</verdict>
+<issues>
+- Issue 1 description
+- Issue 2 description
+</issues>
+\`\`\`
+
+⚠️ Be STRICT. Only approve when ALL acceptance criteria are met with REAL code.
+Do NOT approve skeleton code, placeholder implementations, or incomplete work.
+"
+
+    # Build model options
+    local model_opts=""
+    if [[ "$model" != "auto" && -n "$model" ]]; then
+        model_opts="--model $model"
+    fi
+
+    local review_output_file="${RALPH_DIR}/review-output.txt"
+
+    # Run Copilot CLI with code-review agent
+    echo -e "${BLUE}🤖 Running critic review...${NC}"
+    if timeout 300 $COPILOT_ENV_PREFIX $COPILOT_CMD -p "$review_context" $copilot_opts $model_opts --agent=code-review 2>&1 | tee "$review_output_file"; then
+        echo ""
+    else
+        echo -e "${YELLOW}⚠️ Review agent failed to run, defaulting to REJECTED (iterate more)${NC}"
+        log_line "WARN" "critic_agent_failed"
+        return 1
+    fi
+
+    # Parse verdict
+    if grep -q "<verdict>APPROVED</verdict>" "$review_output_file" 2>/dev/null; then
+        echo -e "${GREEN}✅ Critic APPROVED the completion${NC}"
+        log_line "INFO" "critic_verdict=APPROVED"
+        # Clean up review issues from previous rejections
+        rm -f "${RALPH_DIR}/review-issues.txt"
+        return 0
+    elif grep -q "<verdict>REJECTED</verdict>" "$review_output_file" 2>/dev/null; then
+        echo -e "${RED}❌ Critic REJECTED the completion${NC}"
+        log_line "INFO" "critic_verdict=REJECTED"
+
+        # Extract issues for next iteration context
+        local issues=$(sed -n '/<issues>/,/<\/issues>/p' "$review_output_file" 2>/dev/null || echo "")
+        if [[ -n "$issues" ]]; then
+            echo -e "${YELLOW}Issues found:${NC}"
+            echo "$issues"
+            # Save issues so the next iteration context includes them
+            echo "$issues" > "${RALPH_DIR}/review-issues.txt"
+        fi
+        return 1
+    else
+        echo -e "${YELLOW}⚠️ No clear verdict from critic — defaulting to REJECTED${NC}"
+        log_line "INFO" "critic_verdict=UNCLEAR_REJECTED"
+        # Save the full review output as issues
+        tail -40 "$review_output_file" > "${RALPH_DIR}/review-issues.txt" 2>/dev/null || true
+        return 1
+    fi
+}
+
+# ═══════════════════════════════════════════════════════════════
+# End Multi-Agent Verification
+# ═══════════════════════════════════════════════════════════════
+
 # Get prompt
 get_prompt() {
     cat "$PROMPT_FILE" 2>/dev/null || echo ""
@@ -695,6 +832,9 @@ $prompt
 2. Make real file changes visible in \`git diff\`.
 3. Focus ONLY on files listed in the task scope.
 4. If already satisfied, verify and complete — don't redo.
+5. **Do NOT claim completion prematurely.** Your work will be reviewed by a critic agent.
+6. **Verify ALL acceptance criteria** before outputting the completion promise.
+7. Create REAL, working code — not skeletons, placeholders, or TODOs.
 
 ## Repository State
 \`\`\`
@@ -716,6 +856,18 @@ $(tail -n 80 "$OUTPUT_FILE" 2>/dev/null || echo '<none>')
 "
     fi
 
+    # Include review issues from a previous critic rejection
+    if [[ -f "${RALPH_DIR}/review-issues.txt" ]]; then
+        context="$context
+## ⚠️ PREVIOUS REVIEW REJECTION — FIX THESE ISSUES
+Your previous completion claim was REJECTED by the critic. Address these issues:
+\`\`\`
+$(cat "${RALPH_DIR}/review-issues.txt" 2>/dev/null)
+\`\`\`
+Fix ALL listed issues before claiming completion again.
+"
+    fi
+
     if [[ -n "$promise" ]]; then
         context="$context
 ## Completion
@@ -724,6 +876,9 @@ When ALL acceptance criteria are met, output exactly:
 <promise>$promise</promise>
 \`\`\`
 ⚠️ ONLY when genuinely complete. Never lie.
+⚠️ Your output will be reviewed by a CRITIC AGENT before acceptance.
+⚠️ Skeleton code, placeholders, or incomplete implementations will be REJECTED.
+⚠️ Minimum $MIN_ITERATIONS iterations required before completion is accepted.
 "
     fi
 
@@ -964,20 +1119,38 @@ run_single() {
     if [[ -n "$promise" && "$promise_detected" == "true" ]]; then
         log_line "INFO" "promise_complete_block_entered=true"
         echo ""
-        echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}✅ COMPLETION PROMISE DETECTED!${NC}"
-        echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${CYAN}🔔 COMPLETION PROMISE DETECTED — Starting verification...${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
 
-        # Export for completion hook
-        export RALPH_PROMISE="$promise"
+        # ── Quality Gate 1: Minimum iterations check ──
+        if [[ "$iteration" -lt "$MIN_ITERATIONS" ]]; then
+            echo -e "${YELLOW}⚠️ Minimum iterations not met ($iteration < $MIN_ITERATIONS). Rejecting early completion.${NC}"
+            log_line "INFO" "min_iterations_reject iteration=$iteration min=$MIN_ITERATIONS"
+            # Save a note for the next iteration
+            echo "Your completion claim was rejected because the minimum iteration threshold ($MIN_ITERATIONS) has not been reached. You are on iteration $iteration. Continue working and verify your implementation thoroughly before claiming completion again." > "${RALPH_DIR}/review-issues.txt"
+        else
+            # ── Quality Gate 2: Critic verification review ──
+            if run_verification_review "$iteration" "$promise" "$OUTPUT_FILE"; then
+                echo ""
+                echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
+                echo -e "${GREEN}✅ VERIFIED AND APPROVED BY CRITIC!${NC}"
+                echo -e "${GREEN}═══════════════════════════════════════════════════════════${NC}"
 
-        # Run completion hook
-        run_hook "on-completion"
+                # Export for completion hook
+                export RALPH_PROMISE="$promise"
 
-        # Complete the task
-        # Avoid argv length limits and preserve output as-is.
-        python3 "$SCRIPT_DIR/ralph_mode.py" complete < "$OUTPUT_FILE" || true
-        return 0
+                # Run completion hook
+                run_hook "on-completion"
+
+                # Complete the task
+                python3 "$SCRIPT_DIR/ralph_mode.py" complete < "$OUTPUT_FILE" || true
+                return 0
+            else
+                echo -e "${YELLOW}⚠️ Critic REJECTED completion. Continuing iterations...${NC}"
+                log_line "INFO" "critic_rejected_continuing"
+            fi
+        fi
     fi
 
     # Increment iteration
