@@ -951,12 +951,13 @@ run_single() {
     # ── Memory Bank: clear working memory for fresh iteration ──
     python3 "$SCRIPT_DIR/ralph_mode.py" memory clear-working 2>/dev/null || true
 
-    # Build context/prompt
-    local context=$(build_context)
+    # Build context/prompt and write to file (avoid ARG_MAX limits)
+    local context_file="${RALPH_DIR}/iteration-context.txt"
+    build_context > "$context_file"
 
     if [[ "$verbose" == "true" ]]; then
         echo -e "${YELLOW}📝 Context:${NC}"
-        echo "$context"
+        cat "$context_file"
         echo ""
     fi
 
@@ -976,7 +977,7 @@ run_single() {
     echo -e "${BLUE}🤖 Running GitHub Copilot CLI...${NC}"
     log_line "INFO" "copilot_cmd=$COPILOT_CMD"
 
-    local cmd="$COPILOT_ENV_PREFIX $COPILOT_CMD -p \"$context\" $copilot_opts $model_opts $agent_opts"
+    local cmd="cat $context_file | $COPILOT_ENV_PREFIX $COPILOT_CMD $copilot_opts $model_opts $agent_opts"
 
     if [[ "$dry_run" == "true" ]]; then
         echo -e "${YELLOW}[DRY RUN] Would execute:${NC}"
@@ -999,7 +1000,7 @@ run_single() {
     local promise_detected=false
 
     while [[ $network_retry_count -lt $max_network_retries ]]; do
-        if timeout 600 $COPILOT_ENV_PREFIX $COPILOT_CMD -p "$context" $copilot_opts $model_opts $agent_opts 2>&1 | tee "$OUTPUT_FILE"; then
+        if cat "$context_file" | timeout 600 $COPILOT_ENV_PREFIX $COPILOT_CMD $copilot_opts $model_opts $agent_opts 2>&1 | tee "$OUTPUT_FILE"; then
             echo ""
             exit_code=0
             break
@@ -1028,7 +1029,7 @@ run_single() {
                 else
                     model_opts="--model $fallback"
                 fi
-                if timeout 600 $COPILOT_ENV_PREFIX $COPILOT_CMD -p "$context" $copilot_opts $model_opts $agent_opts 2>&1 | tee "$OUTPUT_FILE"; then
+                if cat "$context_file" | timeout 600 $COPILOT_ENV_PREFIX $COPILOT_CMD $copilot_opts $model_opts $agent_opts 2>&1 | tee "$OUTPUT_FILE"; then
                     echo ""
                     exit_code=0
                 fi
