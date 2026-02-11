@@ -4,6 +4,7 @@ import argparse
 import importlib
 import sys
 
+from .agent_table import ROLE_ARBITER, ROLE_CRITIC, ROLE_DOER, AgentTable
 from .constants import AVAILABLE_MODELS, DEFAULT_MODEL, FALLBACK_MODEL, STRICT_ROOT, STRICT_TASKS, VERSION, colors
 from .helpers import (
     _ensure_project_root,
@@ -823,6 +824,200 @@ def cmd_memory(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_table(args: argparse.Namespace) -> int:
+    """Handle Agent Table commands — multi-agent deliberation protocol."""
+    from pathlib import Path
+
+    action = args.action
+    text_args = args.text if hasattr(args, "text") and args.text else []
+    text = " ".join(text_args) if text_args else ""
+
+    ralph_dir = Path.cwd() / ".ralph-mode"
+    table = AgentTable(ralph_dir=ralph_dir)
+
+    if action == "init":
+        if not text:
+            print(f"{colors.RED}❌ Please provide a task description.{colors.NC}")
+            print(f'   Usage: ralph-mode table init "Refactor the auth module"')
+            return 1
+
+        max_rounds = getattr(args, "max_rounds", 10) or 10
+        require_unanimous = getattr(args, "require_unanimous", False)
+
+        state = table.initialize(
+            task_description=text,
+            max_rounds=max_rounds,
+            require_unanimous=require_unanimous,
+        )
+        print_banner("AGENT TABLE INITIALIZED", colors.GREEN)
+        print(f"  Task:       {state['task'][:80]}")
+        print(f"  Max Rounds: {state['max_rounds']}")
+        print(f"  Unanimous:  {state['require_unanimous']}")
+        print(f"\n  Agents:")
+        print(f"    🛠️  Doer    (Agent 1) — Implements tasks")
+        print(f"    🔍 Critic  (Agent 2) — Reviews and critiques")
+        print(f"    ⚖️  Arbiter (Agent 3) — Makes final decisions")
+        print(f"\n  Next: Start a round with 'ralph-mode table round'")
+        print(f"        Then submit a plan with 'ralph-mode table plan \"...\"'")
+        return 0
+
+    # All following actions require an active table
+    if not table.is_active():
+        print(f"{colors.RED}❌ No active Agent Table session.{colors.NC}")
+        print(f'   Start one with: ralph-mode table init "task description"')
+        return 1
+
+    if action == "status":
+        st = table.status()
+        if not st:
+            print(f"{colors.RED}❌ Could not read table state.{colors.NC}")
+            return 1
+        active_str = f"{colors.GREEN}ACTIVE{colors.NC}" if st["active"] else f"{colors.RED}ENDED{colors.NC}"
+        print_banner("AGENT TABLE STATUS", colors.BLUE)
+        print(f"  Status:       {active_str}")
+        print(f"  Task:         {st['task'][:80]}")
+        print(f"  Round:        {st['current_round']}/{st['max_rounds']}")
+        print(f"  Phase:        {st['current_phase']}")
+        print(f"  Outcome:      {st.get('outcome') or 'in progress'}")
+        print(f"  Messages:     {st['total_messages']}")
+        print(f"  Escalations:  {st['escalation_count']}")
+        if st.get("messages_by_agent"):
+            print(f"  By Agent:")
+            for agent, count in st["messages_by_agent"].items():
+                emoji = {"doer": "🛠️", "critic": "🔍", "arbiter": "⚖️"}.get(agent, "")
+                print(f"    {emoji} {agent}: {count} messages")
+        if st.get("rounds_summary"):
+            print(f"  Rounds:")
+            for rs in st["rounds_summary"]:
+                print(f"    Round {rs['round']}: {rs['outcome']}")
+        return 0
+
+    elif action == "round":
+        try:
+            state = table.new_round()
+            print(f"{colors.GREEN}✅ Started round {state['current_round']}{colors.NC}")
+            print(f"   Phase: {state['current_phase']}")
+            print(f"   Next: Submit a plan with 'ralph-mode table plan \"...\"'")
+            return 0
+        except ValueError as e:
+            print(f"{colors.RED}❌ {e}{colors.NC}")
+            return 1
+
+    elif action == "plan":
+        if not text:
+            print(f"{colors.RED}❌ Please provide plan content.{colors.NC}")
+            return 1
+        msg = table.submit_plan(text)
+        print(f"{colors.GREEN}✅ Plan submitted (round {msg.round_number}){colors.NC}")
+        print(f"   🛠️ Doer → 🔍 Critic: Waiting for critique...")
+        return 0
+
+    elif action == "critique":
+        if not text:
+            print(f"{colors.RED}❌ Please provide critique content.{colors.NC}")
+            return 1
+        approved = getattr(args, "approve", False)
+        msg = table.submit_critique(text, approved=approved)
+        status_icon = "✅ APPROVED" if approved else "❌ NOT APPROVED"
+        print(f"{colors.GREEN}✅ Critique submitted ({status_icon}){colors.NC}")
+        if not approved:
+            print(f"   🔍 Critic → ⚖️ Arbiter: Escalating for decision...")
+        return 0
+
+    elif action == "implement":
+        if not text:
+            print(f"{colors.RED}❌ Please provide implementation notes.{colors.NC}")
+            return 1
+        msg = table.submit_implementation(text)
+        print(f"{colors.GREEN}✅ Implementation submitted (round {msg.round_number}){colors.NC}")
+        print(f"   🛠️ Doer → 🔍 Critic: Waiting for review...")
+        return 0
+
+    elif action == "review":
+        if not text:
+            print(f"{colors.RED}❌ Please provide review content.{colors.NC}")
+            return 1
+        approved = getattr(args, "approve", False)
+        msg = table.submit_review(text, approved=approved)
+        status_icon = "✅ APPROVED" if approved else "❌ NOT APPROVED"
+        print(f"{colors.GREEN}✅ Review submitted ({status_icon}){colors.NC}")
+        return 0
+
+    elif action == "escalate":
+        reason = text or "Disagreement between Doer and Critic"
+        msg = table.escalate(reason=reason)
+        print(f"{colors.GREEN}✅ Escalated to Arbiter (round {msg.round_number}){colors.NC}")
+        print(f"   ⚖️ Arbiter will make the final decision...")
+        return 0
+
+    elif action == "decide":
+        if not text:
+            print(f"{colors.RED}❌ Please provide decision content.{colors.NC}")
+            return 1
+        side_with = getattr(args, "side_with", "") or ""
+        msg = table.submit_decision(text, side_with=side_with)
+        print(f"{colors.GREEN}✅ Arbiter decision submitted{colors.NC}")
+        if side_with:
+            print(f"   ⚖️ Sides with: {side_with}")
+        return 0
+
+    elif action == "approve":
+        notes = text or "Approved. Proceed."
+        msg = table.submit_approval(notes=notes)
+        print(f"{colors.GREEN}✅ Arbiter approved!{colors.NC}")
+        print(f"   🛠️ Doer may proceed with implementation.")
+        return 0
+
+    elif action == "reject":
+        if not text:
+            print(f"{colors.RED}❌ Please provide rejection reason.{colors.NC}")
+            return 1
+        msg = table.submit_rejection(text)
+        print(f"{colors.RED}❌ Arbiter rejected.{colors.NC}")
+        print(f"   Reason: {text[:100]}")
+        return 0
+
+    elif action == "context":
+        role = text.strip().lower() if text else ""
+        if role not in (ROLE_DOER, ROLE_CRITIC, ROLE_ARBITER):
+            print(f"{colors.RED}❌ Specify role: doer, critic, or arbiter{colors.NC}")
+            print(f"   Usage: ralph-mode table context doer")
+            return 1
+
+        if role == ROLE_DOER:
+            ctx = table.build_doer_context()
+        elif role == ROLE_CRITIC:
+            ctx = table.build_critic_context()
+        else:
+            ctx = table.build_arbiter_context()
+
+        print(ctx)
+        return 0
+
+    elif action == "transcript":
+        transcript = table.get_transcript_text()
+        print(transcript)
+        return 0
+
+    elif action == "finalize":
+        outcome = text or "approved"
+        state = table.finalize(outcome=outcome)
+        print(f"{colors.GREEN}✅ Agent Table finalized.{colors.NC}")
+        print(f"   Outcome: {state['outcome']}")
+        print(f"   Rounds:  {state.get('current_round', 0)}")
+        print(f"   Messages: {state.get('total_messages', 0)}")
+        return 0
+
+    elif action == "reset":
+        table.reset()
+        print(f"{colors.GREEN}✅ Agent Table data removed.{colors.NC}")
+        return 0
+
+    else:
+        print(f"{colors.RED}❌ Unknown table action: {action}{colors.NC}")
+        return 1
+
+
 def cmd_help(args: argparse.Namespace) -> int:
     """Handle help command."""
     models_str = ", ".join(AVAILABLE_MODELS[:5]) + "..."
@@ -841,6 +1036,7 @@ self-referential AI development loops with GitHub Copilot.
     run         Run a task from the task library
     tasks       List, search, or show tasks
     batch-init  Initialize batch mode with multiple tasks
+    table       Agent Table — multi-agent deliberation protocol
     disable     Disable Ralph mode
     status      Show current status
     prompt      Show current prompt
@@ -854,6 +1050,22 @@ self-referential AI development loops with GitHub Copilot.
     memory      Long-term memory management (mem0-inspired)
     history     Show iteration history
     help        Show this help message
+
+{colors.YELLOW}AGENT TABLE (multi-agent deliberation):{colors.NC}
+    table init <task>        Start a new Agent Table session
+    table status             Show table status
+    table plan <text>        Doer submits a plan
+    table critique <text>    Critic submits a critique
+    table implement <text>   Doer submits implementation notes
+    table review <text>      Critic reviews implementation
+    table escalate [reason]  Escalate to Arbiter
+    table decide <text>      Arbiter makes a decision
+    table approve [notes]    Arbiter approves
+    table reject <reason>    Arbiter rejects
+    table context <role>     Build context for an agent role
+    table transcript         Show full conversation
+    table finalize           End the session
+    table reset              Remove all table data
 
 {colors.YELLOW}CONTEXT COMMANDS:{colors.NC}
     context show            Show full context that AI receives
@@ -904,6 +1116,10 @@ self-referential AI development loops with GitHub Copilot.
     ralph-mode run --group rtl
     ralph-mode tasks list
     ralph-mode tasks show RTL-001
+    ralph-mode table init "Refactor the auth module"
+    ralph-mode table plan "Step 1: Extract interface..."
+    ralph-mode table critique "The plan misses error handling..."
+    ralph-mode table context doer
     ralph-mode enable "Fix tests" --model claude-sonnet-4.5
     ralph-mode batch-init --tasks-file tasks.json --max-iterations 20
     ralph-mode status
@@ -1078,6 +1294,41 @@ def main() -> int:
     )
     memory_parser.add_argument("--limit", type=int, default=10, help="Max results (for search)")
     memory_parser.set_defaults(func=cmd_memory)
+
+    # Agent Table command (multi-agent deliberation protocol)
+    table_parser = subparsers.add_parser("table", help="Agent Table — multi-agent deliberation protocol")
+    table_parser.add_argument(
+        "action",
+        choices=[
+            "init",
+            "status",
+            "round",
+            "plan",
+            "critique",
+            "implement",
+            "review",
+            "escalate",
+            "decide",
+            "approve",
+            "reject",
+            "context",
+            "transcript",
+            "finalize",
+            "reset",
+        ],
+        help="Table action",
+    )
+    table_parser.add_argument("text", nargs="*", default=None, help="Text content for the action")
+    table_parser.add_argument("--max-rounds", type=int, default=10, help="Maximum deliberation rounds (default: 10)")
+    table_parser.add_argument("--approve", action="store_true", default=False, help="Mark critique/review as approved")
+    table_parser.add_argument("--side-with", type=str, default="", help="Who the Arbiter sides with (doer or critic)")
+    table_parser.add_argument(
+        "--require-unanimous",
+        action="store_true",
+        default=False,
+        help="Require Critic approval before Arbiter can approve",
+    )
+    table_parser.set_defaults(func=cmd_table)
 
     # Help command
     help_parser = subparsers.add_parser("help", help="Show help")

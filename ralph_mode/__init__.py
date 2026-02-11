@@ -1,5 +1,6 @@
 """Public API for Ralph Mode."""
 
+from .agent_table import AgentMessage, AgentTable
 from .cli import (
     cmd_batch_init,
     cmd_complete,
@@ -14,6 +15,7 @@ from .cli import (
     cmd_prompt,
     cmd_run,
     cmd_status,
+    cmd_table,
     cmd_tasks,
     cmd_validate,
     cmd_verification,
@@ -48,6 +50,8 @@ from .tasks import TaskLibrary
 from .verification import _extract_section, _extract_verification_commands, _run_verification_commands, _truncate_output
 
 __all__ = [
+    "AgentMessage",
+    "AgentTable",
     "AVAILABLE_MODELS",
     "Colors",
     "ContextManager",
@@ -88,6 +92,7 @@ __all__ = [
     "cmd_run",
     "cmd_scan",
     "cmd_status",
+    "cmd_table",
     "cmd_tasks",
     "cmd_validate",
     "cmd_verification",
