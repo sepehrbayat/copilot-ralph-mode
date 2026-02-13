@@ -770,16 +770,25 @@ run_compilation_gate() {
         local error_count=0
         if grep -qE "error -|error\[" "$compile_output_file" 2>/dev/null; then
             # Dart / Rust style
-            error_count=$(grep -cE "error -|error\[" "$compile_output_file" 2>/dev/null || echo "0")
+            error_count=$(grep -cE "error -|error\[" "$compile_output_file" 2>/dev/null || true)
         elif grep -qE "^error TS|error:" "$compile_output_file" 2>/dev/null; then
             # TypeScript / generic
-            error_count=$(grep -cE "^error TS|error:" "$compile_output_file" 2>/dev/null || echo "0")
+            error_count=$(grep -cE "^error TS|error:" "$compile_output_file" 2>/dev/null || true)
         elif grep -qE "^E[0-9]|^F[0-9]|SyntaxError" "$compile_output_file" 2>/dev/null; then
             # Python
-            error_count=$(grep -cE "^E[0-9]|^F[0-9]|SyntaxError" "$compile_output_file" 2>/dev/null || echo "0")
+            error_count=$(grep -cE "^E[0-9]|^F[0-9]|SyntaxError" "$compile_output_file" 2>/dev/null || true)
         else
-            # Fallback: count lines that look like errors
-            error_count=$(wc -l < "$compile_output_file" 2>/dev/null || echo "0")
+            # Fallback: count lines that look like actual errors (not info/warnings)
+            error_count=$(grep -ciE "^error|: error" "$compile_output_file" 2>/dev/null || true)
+        fi
+
+        # If no actual errors found despite non-zero exit, treat as pass
+        # (e.g., dart analyze returns non-zero for info-level issues too)
+        if [[ "$error_count" -eq 0 ]]; then
+            echo -e "${GREEN}✅ Compilation check passed — no errors (info/warnings only)${NC}"
+            log_line "INFO" "compilation_gate_pass_info_only"
+            rm -f "$compile_output_file"
+            return 0
         fi
 
         echo -e "${RED}❌ Compilation gate FAILED — $error_count error(s) detected${NC}"
@@ -906,7 +915,7 @@ run_verification_review() {
     if [[ -n "$compile_cmd" ]]; then
         local compile_out
         compile_out=$(eval "timeout 60 $compile_cmd" 2>&1 || true)
-        local error_lines=$(echo "$compile_out" | grep -ciE "error" 2>/dev/null || echo "0")
+        local error_lines=$(echo "$compile_out" | grep -ciE "error" 2>/dev/null || true)
         if [[ "$error_lines" -gt 0 ]]; then
             compile_results="
 ## ⚠️ Compilation/Analysis Results ($error_lines error lines detected)
@@ -1481,7 +1490,7 @@ run_single() {
             if [[ -n "$early_compile_cmd" ]]; then
                 local early_compile_out
                 early_compile_out=$(eval "timeout 60 $early_compile_cmd" 2>&1 || true)
-                local early_error_count=$(echo "$early_compile_out" | grep -ciE "error" 2>/dev/null || echo "0")
+                local early_error_count=$(echo "$early_compile_out" | grep -ciE "error" 2>/dev/null || true)
                 if [[ "$early_error_count" -gt 0 ]]; then
                     early_compile_feedback="
 
